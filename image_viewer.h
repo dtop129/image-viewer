@@ -14,7 +14,7 @@ class ImageViewerApp
 	private:
 		sf::RenderWindow window;
 		sf::Vector2f window_size = {800, 600};
-		sf::FloatRect view_rect = {0, 0, 1, 1};;
+		sf::FloatRect view_rect = {0, 0, 1, 1};
 
 		ViewMode mode = ViewMode::SinglePage;
 
@@ -24,11 +24,12 @@ class ImageViewerApp
 		std::map<std::string, sf::Texture> loaded_textures;
 
 		int curr_image_index = 0;
+		bool no_double = false;
 		unsigned int drawn_images_count;
 
 		float scroll_speed = 1000.f;
 
-		bool image_changed = false;
+		bool image_changed = true;
 		bool window_resized = true;
 
 		sf::Texture& load_texture(const std::string& image_path)
@@ -44,8 +45,14 @@ class ImageViewerApp
 
 		void render()
 		{
+			drawn_images_count = 0;
 			if (images.empty())
+			{
+				if (image_changed)
+					window.setTitle("no images loaded");
+
 				return;
+			}
 
 			std::vector<sf::Sprite> sprites;
 			sf::FloatRect drawn_area(0, 0, 0, 0);
@@ -56,12 +63,14 @@ class ImageViewerApp
 				const auto& image_path = images[curr_image_index];
 
 				sprites.emplace_back(load_texture(image_path));
+				sprites.back().scale(0.01, 0.01);
 				drawn_area.width += sprites.back().getGlobalBounds().width;
 				drawn_area.height = sprites.back().getGlobalBounds().height;
 
 				if ((mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga) &&
 						curr_image_index + 1 < (int)images.size() &&
-						drawn_area.width < drawn_area.height)
+						drawn_area.width < drawn_area.height &&
+						!no_double)
 				{
 					const auto& image2_path = images[curr_image_index + 1];
 					const auto& image2_size = texture_sizes[image2_path];
@@ -168,8 +177,9 @@ class ImageViewerApp
 
 			if (image_changed || scroll_image_change)
 			{
-				std::cout << "current_image=\"" << images[curr_image_index] << "\"" << std::endl;
-				window.setTitle(images[curr_image_index]);
+				auto& curr_image = images[curr_image_index];
+				std::cout << "current_image=\"" << curr_image << "\"" << std::endl;
+				window.setTitle(curr_image);
 			}
 			image_changed = window_resized = false;
 		}
@@ -181,7 +191,7 @@ class ImageViewerApp
 			mode = new_mode;
 		}
 
-		void poll_events()
+		void poll_events(float dt)
 		{
 			sf::Event event;
 			while (window.pollEvent(event))
@@ -192,6 +202,11 @@ class ImageViewerApp
 				{
 					window_size = sf::Vector2f(event.size.width, event.size.height);
 					window_resized = true;
+				}
+				else if (event.type == sf::Event::MouseWheelScrolled)
+				{
+					view_rect.top -= scroll_speed * event.mouseWheelScroll.delta * dt;
+					window.setView(sf::View(view_rect));
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
@@ -213,24 +228,53 @@ class ImageViewerApp
 							offset = -1;
 						if ((mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga) && !event.key.control)
 						{
+							bool original_no_double = no_double;
+							no_double = false;
+
 							offset *= 2;
 							if (drawn_images_count == 1 && offset == 2)
 								offset = 1;
 							else if (offset == -2 && curr_image_index > 1)
 							{
-								int prev_image_tag = image_tags[images[curr_image_index - 1]];
-								int prev2_image_tag = image_tags[images[curr_image_index - 2]];
 								sf::Vector2f prev_image_size = texture_sizes[images[curr_image_index - 1]];
+								sf::Vector2f prev2_image_size = texture_sizes[images[curr_image_index - 2]];
 
-								if (prev_image_size.x >= prev_image_size.y || prev_image_tag != prev2_image_tag)
+								if (prev_image_size.x >= prev_image_size.y ||
+									prev2_image_size.x >= prev2_image_size.y)
 									offset = -1;
+
+								if (prev2_image_size.x >= prev2_image_size.y)
+									no_double = true;
+
+								if (offset == -2)
+								{
+									int curr_image_tag = image_tags[images[curr_image_index]];
+									int mid_image_tag = image_tags[images[curr_image_index + offset/2]];
+									int new_image_tag = image_tags[images[curr_image_index + offset]];
+
+									if (curr_image_tag == mid_image_tag && curr_image_tag != new_image_tag)
+									{
+										offset = -1;
+										no_double = true;
+									}
+								}
 							}
+
+
+							if (curr_image_index + offset == -1)
+							{
+								no_double = true;
+								offset++;
+							}
+
+							if (!(curr_image_index + offset < (int)images.size() && curr_image_index + offset >= 0))
+								no_double = original_no_double;
 						}
 
 						int prev_index = curr_image_index;
-						if (images.size() > 1 && curr_image_index + offset < (int)images.size())
+						if (images.size() > 1 && curr_image_index + offset < (int)images.size() && curr_image_index + offset >= 0)
 						{
-							curr_image_index = std::max(0, curr_image_index + offset);
+							curr_image_index += offset;
 
 							if (curr_image_index != prev_index)
 							{
@@ -269,8 +313,10 @@ class ImageViewerApp
 				{
 					if (sf::Texture tex; tex.loadFromFile(args[0]))
 					{
-						auto new_iter = images.insert(std::upper_bound(images.begin(), images.end(), args[0]), args[0]);
+						tex.setSmooth(true);
 						texture_sizes[args[0]] = static_cast<sf::Vector2f>(tex.getSize());
+
+						auto new_iter = images.insert(std::upper_bound(images.begin(), images.end(), args[0]), args[0]);
 
 						if (args.size() == 2)
 							image_tags[args[0]] = std::stoi(args[1]);
@@ -286,20 +332,18 @@ class ImageViewerApp
 					auto image_iter = std::find(images.begin(), images.end(), args[0]);
 					if (image_iter != images.end())
 					{
-						int prev_index = curr_image_index;
-
 						if (action == "goto_image_byname")
 							curr_image_index = image_iter - images.begin();
 						else
 						{
-							loaded_textures.erase(args[0]);
-							images.erase(image_iter);
 							if (image_iter - images.begin() < curr_image_index)
 								curr_image_index--;
-						}
+							else if (image_iter - images.begin() == curr_image_index)
+								image_changed = true;
 
-						if (prev_index != curr_image_index)
-							image_changed = true;
+							loaded_textures.erase(args[0]);
+							images.erase(image_iter);
+						}
 					}
 					else
 						std::cerr << args[0] << " not found\n";
@@ -312,20 +356,18 @@ class ImageViewerApp
 
 					if (index >= 0 && index < (int)images.size())
 					{
-						int prev_index = curr_image_index;
-
 						if (action == "goto_image_byindex")
 							curr_image_index = index;
 						else
 						{
-							loaded_textures.erase(images[index]);
-							images.erase(images.begin() + index);
 							if (index < curr_image_index)
 								curr_image_index--;
-						}
+							else if (index == curr_image_index)
+								image_changed = true;
 
-						if (prev_index != curr_image_index)
-							image_changed = true;
+							loaded_textures.erase(images[index]);
+							images.erase(images.begin() + index);
+						}
 					}
 				}
 				else if (action == "change_mode")
@@ -376,10 +418,14 @@ class ImageViewerApp
 		}
 
 	public:
-		ImageViewerApp() : window(sf::VideoMode(800, 600), "Image Viewer")
+		ImageViewerApp()
 		{
-			window.setKeyRepeatEnabled(false);
+			sf::ContextSettings settings;
+			settings.antialiasingLevel = 8;
+			window.create(sf::VideoMode(800, 600), "", sf::Style::Default, settings);
+			//window.setKeyRepeatEnabled(false);
 			window.setVerticalSyncEnabled(true);
+
 			std::cin.sync_with_stdio(false);
 		}
 
@@ -389,7 +435,7 @@ class ImageViewerApp
 			float dt = 0.f;
 			while (window.isOpen())
 			{
-				poll_events();
+				poll_events(dt);
 				handle_keyboard(dt);
 				check_stdin();
 
