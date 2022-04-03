@@ -38,18 +38,37 @@ class ImageViewerApp
 
 		void create_double_pages(int tag) //MAYBE CREATE FUNCTION TO UPDATE DOUBLE PAGES; RESPECTING THE FIXES
 		{
-			auto it = images.find(tag);
-			if (it == images.end())
+			update_double_pages_from(tag, 0);
+		}
+
+		void update_double_pages_from(int tag, int new_index)
+		{
+			const auto& tag_images = images.find(tag);
+			if (tag_images == images.end())
 				return;
 
-			double_pages[tag].clear();
+			auto& tag_double_pages = double_pages[tag];
 
-			const auto& images_vec = it->second;
-			auto& current_double_pages = double_pages[tag];
+			if (tag_double_pages.empty())
+				new_index = 0;
+			else
+			{
+				auto change_begin = std::find(tag_double_pages.begin(), tag_double_pages.end(), new_index);
+				if (change_begin == tag_double_pages.end())
+				{
+					new_index--;
+
+					change_begin = std::find(tag_double_pages.begin(), tag_double_pages.end(), new_index);
+				}
+
+				tag_double_pages.erase(change_begin, tag_double_pages.end());
+			}
+
+			const auto& images_vec = tag_images->second;
+
 			int distance_from_last = 0;
-
 			bool prev_wide_page = true;
-			for (auto it = images_vec.begin(); it != images_vec.end(); ++it)
+			for (auto it = images_vec.begin() + new_index; it != images_vec.end(); ++it)
 			{
 				distance_from_last++;
 
@@ -62,22 +81,22 @@ class ImageViewerApp
 
 				if (distance_from_last > 1 || prev_wide_page)
 				{
-					current_double_pages.push_back(it - images_vec.begin());
+					tag_double_pages.push_back(it - images_vec.begin());
 					distance_from_last = 0;
 				}
 
 				prev_wide_page = is_wide;
 			}
 
+			//std::cout << "UPDATING FROM INDEX " << new_index << std::endl;
 			//std::cout << "TAG " << tag << " with " << images_vec.size() << " images" << '\n';
-			//for (auto doublebegin : current_double_pages)
+			//for (auto doublebegin : tag_double_pages)
 			//{
 			//	std::cout << doublebegin << ' ';
 			//}
 			//std::cout << '\n';
-
-			if (tag == curr_tag_images->first)
-				image_changed = true;
+			//if (tag == curr_tag_images->first && curr_image_index >= new_index)
+			//	image_changed = true;
 		}
 
 		void fix_double_pages(int dir)
@@ -158,16 +177,6 @@ class ImageViewerApp
 
 		const std::string& current_image() const
 		{
-			return curr_tag_images->second[curr_image_index];
-		}
-
-		const std::string& next_image() const
-		{
-			if (curr_image_index + 1 != (int)curr_tag_images->second.size())
-				return curr_tag_images->second[curr_image_index + 1];
-			else if (curr_tag_images != std::prev(images.end()))
-				return std::next(curr_tag_images)->second[0];
-
 			return curr_tag_images->second[curr_image_index];
 		}
 
@@ -349,7 +358,7 @@ class ImageViewerApp
 							{
 
 								if ((offset == 1 && std::next(curr_tag_images) == images.end()) || (offset == -1 && curr_tag_images == images.begin()))
-									std::cout << "last_in_dir=" << (offset > 0) - (offset < 0) << '\n';
+									std::cout << "last_in_dir=" << (offset > 0) - (offset < 0) << std::endl;
 								else
 								{
 									std::advance(curr_tag_images, offset);
@@ -379,7 +388,7 @@ class ImageViewerApp
 							if (curr_image_index != corrected_index)
 							{
 								if ((offset == 1 && curr_tag_images == std::prev(images.end())) || (offset == -1 && curr_tag_images == images.begin()))
-									std::cout << "last_in_dir=" << (offset > 0) - (offset < 0) << '\n';
+									std::cout << "last_in_dir=" << (offset > 0) - (offset < 0) << std::endl;
 								else
 								{
 									std::advance(curr_tag_images, offset);
@@ -425,7 +434,7 @@ class ImageViewerApp
 						curr_image_index++;
 
 					if (mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga)
-						create_double_pages(tag);
+						update_double_pages_from(tag, new_iter - tag_images_vec.begin());
 				}
 			}
 			else if (action == "goto_image_byindex")
@@ -450,10 +459,10 @@ class ImageViewerApp
 						image_changed = true;
 					}
 					else
-						std::cerr << "index " << new_index << " not present on tag " << tag << "\n";
+						std::cerr << "index " << new_index << " not present on tag " << tag << std::endl;
 				}
 				else
-					std::cerr << "tag " << args[0] << " not present\n";
+					std::cerr << "tag " << args[0] << " not present" << std::endl;
 			}
 			else if (action == "goto_image_byname")
 			{
@@ -473,10 +482,10 @@ class ImageViewerApp
 						image_changed = true;
 					}
 					else
-						std::cerr << args[0] << " not present on tag " << tag << "\n";
+						std::cerr << args[0] << " not present on tag " << tag << std::endl;
 				}
 				else
-					std::cerr << "tag " << tag << " not present\n";
+					std::cerr << "tag " << tag << " not present" << std::endl;
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
@@ -508,7 +517,7 @@ class ImageViewerApp
 					}
 				}
 				else
-					std::cerr << "tag " << tag << " not present\n";
+					std::cerr << "tag " << tag << " not present" << std::endl;
 			}
 			else if (action == "change_mode")
 			{
@@ -521,7 +530,7 @@ class ImageViewerApp
 				//else if (args[0] == "vert")
 				//	change_mode(ViewMode::ContinuousVert);
 				else
-					std::cerr << args[0] << "is not a valid mode\n";
+					std::cerr << args[0] << "is not a valid mode" << std::endl;
 			}
 		}
 
@@ -607,9 +616,6 @@ class ImageViewerApp
 				window.display();
 
 				dt = clock.restart().asSeconds();
-
-				std::flush(std::cout);
-				std::flush(std::cerr);
 			}
 		}
 };
