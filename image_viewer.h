@@ -202,7 +202,7 @@ class ImageViewerApp
 					}
 				}
 
-				if (image_changed || mode_changed || reset_view)
+				if (image_changed || mode_changed || reset_view || double_paging_change)
 				{
 					sf::FloatRect drawn_rect;
 					for (const auto& sprite : sprites)
