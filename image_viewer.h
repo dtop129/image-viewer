@@ -52,10 +52,11 @@ class ImageViewerApp
 				auto change_begin = std::find(tag_double_pages.begin(), tag_double_pages.end(), new_index);
 				if (change_begin == tag_double_pages.end())
 				{
-					new_index--;
-
-					change_begin = std::find(tag_double_pages.begin(), tag_double_pages.end(), new_index);
+					change_begin = std::find(tag_double_pages.begin(), tag_double_pages.end(), new_index - 1);
 				}
+
+				if (change_begin != tag_double_pages.end())
+					new_index = *change_begin;
 
 				tag_double_pages.erase(change_begin, tag_double_pages.end());
 			}
@@ -71,6 +72,7 @@ class ImageViewerApp
 
 				if (is_wide)
 					distance_from_last++;
+
 
 				if (distance_from_last > 1 || prev_wide_page)
 				{
@@ -88,16 +90,6 @@ class ImageViewerApp
 
 				current_double_page_index = std::find(tag_double_pages.begin(), tag_double_pages.end(), curr_image_index) - tag_double_pages.begin();
 			}
-
-			//std::cout << "UPDATING FROM INDEX " << new_index << std::endl;
-			//std::cout << "TAG " << tag << " with " << images_vec.size() << " images" << '\n';
-			//for (auto doublebegin : tag_double_pages)
-			//{
-			//	std::cout << doublebegin << ' ';
-			//}
-			//std::cout << '\n';
-			//if (tag == curr_tag_images->first && curr_image_index >= new_index)
-			//	image_changed = true;
 		}
 
 		void fix_double_pages(int dir)
@@ -255,7 +247,7 @@ class ImageViewerApp
 				std::string title = std::to_string(curr_tag_images->first) + " - " + std::to_string(curr_image_index);
 				window.setTitle(title);
 
-				std::cout << "current_image=" << current_image() << std::endl;
+				std::cout << "current_image=\"" << current_image() << '"' << std::endl;
 			}
 
 			prepare_render();
