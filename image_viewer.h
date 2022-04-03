@@ -64,15 +64,14 @@ class ImageViewerApp
 			const auto& images_vec = tag_images->second;
 
 			int distance_from_last = 0;
-			bool prev_wide_page = true;
+			int prev_wide_page = true;
 			for (auto it = images_vec.begin() + new_index; it != images_vec.end(); ++it)
 			{
 				distance_from_last++;
-				bool is_wide = texture_wide[*it];
+				int is_wide = texture_wide[*it];
 
 				if (is_wide)
 					distance_from_last++;
-
 
 				if (distance_from_last > 1 || prev_wide_page)
 				{
@@ -92,7 +91,7 @@ class ImageViewerApp
 			}
 		}
 
-		void fix_double_pages(int dir)
+		void fix_double_pages()
 		{
 			int current_tag = curr_tag_images->first;
 			auto& current_double_pages = double_pages[current_tag];
@@ -115,18 +114,12 @@ class ImageViewerApp
 			auto first_changed_image = images[current_tag][first_changed_index];
 
 			if (texture_wide[first_changed_image] == 2)
-			{
-				curr_image_index--;
 				texture_wide[first_changed_image] = 0;
-			}
 			else
-			{
-				curr_image_index++;
 				texture_wide[first_changed_image] = 2;
-			}
 
 			update_double_pages_from(current_tag, first_changed_index);
-
+			last_render_image_index = curr_image_index - 1; //HACK TO ALLOW REDRAWING
 		}
 
 		sf::Texture& load_texture(const std::string& image_path)
@@ -257,7 +250,6 @@ class ImageViewerApp
 			last_render_image_index = curr_image_index;
 			last_render_mode = mode;
 			reset_view = false;
-
 		}
 
 		void change_mode(ViewMode new_mode)
@@ -296,8 +288,9 @@ class ImageViewerApp
 						change_mode(ViewMode::DoublePageManga);
 					//else if (event.key.code == sf::Keyboard::V)
 					//	change_mode(ViewMode::ContinuousVert);
-					else if (event.key.code == sf::Keyboard::C)
-						fix_double_pages(1);
+					else if (event.key.code == sf::Keyboard::C &&
+							(mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga))
+						fix_double_pages();
 					else if ((event.key.code == sf::Keyboard::Space ||
 							event.key.code == sf::Keyboard::BackSpace) && !images.empty())
 					{
@@ -390,6 +383,15 @@ class ImageViewerApp
 
 					if (mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga)
 						update_double_pages_from(tag, new_iter - tag_images_vec.begin());
+
+					//for (auto[tag, image_vec] : images)
+					//{
+					//	for (auto image : image_vec)
+					//	{
+					//		std::cerr << "TAG " << tag << " : " << image << '\n';
+					//	}
+					//}
+					//std::cerr << std::endl;
 				}
 			}
 			else if (action == "goto_image_byindex")
@@ -497,11 +499,15 @@ class ImageViewerApp
 				else
 					std::cerr << args[0] << "is not a valid mode" << std::endl;
 			}
+			else
+			{
+				std::cerr << action << " is not a valid command" << std::endl;
+			}
 		}
 
 		void check_stdin()
 		{
-			while (std::cin.rdbuf()->in_avail())
+			if (std::cin.rdbuf()->in_avail())
 			{
 				std::string cmd;
 				std::getline(std::cin, cmd);
