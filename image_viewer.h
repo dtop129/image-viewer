@@ -546,37 +546,6 @@ class ImageViewerApp
 			}
 		}
 
-		void handle_keyboard(float dt)
-		{
-			if (!window.hasFocus())
-				return;
-
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::L))
-			{
-				window_view.move(scroll_speed * dt, 0);
-				window.setView(window_view);
-			}
-			else if (sf::Keyboard::isKeyPressed(sf::Keyboard::H))
-			{
-				window_view.move(-scroll_speed * dt, 0);
-				window.setView(window_view);
-			}
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::K))
-			{
-				window_view.move(0, -scroll_speed * dt);
-				window.setView(window_view);
-			}
-			else if (sf::Keyboard::isKeyPressed(sf::Keyboard::J))
-			{
-				window_view.move(0, scroll_speed * dt);
-				window.setView(window_view);
-			}
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Equal))
-			{
-				reset_view = true;
-			}
-		}
-
 	public:
 		ImageViewerApp()
 		{
@@ -595,7 +564,6 @@ class ImageViewerApp
 			float dt = 0.f;
 			while (window.isOpen())
 			{
-				handle_keyboard(dt);
 				check_stdin();
 				poll_events(dt);
 
