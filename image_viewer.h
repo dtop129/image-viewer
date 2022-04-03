@@ -21,7 +21,7 @@ class ImageViewerApp
 
 		std::map<int, std::vector<std::string>> images;
 		std::map<std::string, int> image_tags;
-		std::map<std::string, bool> texture_wide;
+		std::map<std::string, int> texture_wide;
 		std::map<std::string, sf::Texture> loaded_textures;
 
 		std::map<int, std::vector<std::string>>::iterator curr_tag_images;
@@ -96,57 +96,35 @@ class ImageViewerApp
 			int current_tag = curr_tag_images->first;
 			auto& current_double_pages = double_pages[current_tag];
 
-			if (texture_wide[current_image()])
+			if (texture_wide[current_image()] == 1 || curr_image_index == (int)images[current_tag].size() - 1)
 				return;
 
-			auto begin_wide_page = current_double_pages.begin() - 1;
+			auto begin_change_page = current_double_pages.begin();
 			for (auto it = std::find(current_double_pages.rbegin(), current_double_pages.rend(), curr_image_index) + 1; it != current_double_pages.rend(); ++it)
 			{
 				const auto& image = images[current_tag][*it];
-				if (texture_wide[image])
+				if (texture_wide[image] == 1)
 				{
-					begin_wide_page = (it + 1).base();
+					begin_change_page = it.base();
 					break;
 				}
 			}
 
-			auto end_wide_page = current_double_pages.end();
-			for (auto it = begin_wide_page + 1; it != current_double_pages.end(); ++it)
+			int first_changed_index = *begin_change_page;
+			auto first_changed_image = images[current_tag][first_changed_index];
+
+			if (texture_wide[first_changed_image] == 2)
 			{
-				const auto& image = images[current_tag][*it];
-				if (texture_wide[image])
-				{
-					end_wide_page = it;
-					break;
-				}
+				curr_image_index--;
+				texture_wide[first_changed_image] = 0;
 			}
-
-
-			if (end_wide_page - begin_wide_page <= 2)
-				return;
-
-			int offset;
-			if (*(begin_wide_page + 1) + 1 == *(begin_wide_page + 2))
-				offset = -1;
 			else
 			{
-				offset = 1;
-				current_double_pages.push_back(*(begin_wide_page + 1));
+				curr_image_index++;
+				texture_wide[first_changed_image] = 2;
 			}
 
-			for (auto it = begin_wide_page + 1; it != end_wide_page; ++it)
-				*it += offset;
-
-			if (offset == -1)
-				current_double_pages.push_back(*(end_wide_page - 1) + 2);
-
-			std::erase_if(current_double_pages,
-					[&](int x){
-						return x < 0 || x >= (int)images[current_tag].size();
-					});
-
-			std::sort(current_double_pages.begin(), current_double_pages.end());
-			current_double_pages.erase(std::unique(current_double_pages.begin(), current_double_pages.end()), current_double_pages.end());
+			update_double_pages_from(current_tag, first_changed_index);
 
 			image_changed = true;
 		}
