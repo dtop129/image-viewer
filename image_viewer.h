@@ -7,7 +7,7 @@
 
 #include <SFML/Graphics.hpp>
 
-enum class ViewMode { SinglePage, DoublePage, DoublePageManga, ContinuousVert };
+enum class ViewMode { SinglePage, DoublePage, DoublePageManga, ContinuousVert, Invalid };
 
 class ImageViewerApp
 {
@@ -28,10 +28,9 @@ class ImageViewerApp
 		int curr_image_index = -1;
 
 		int last_render_image_index = -2;
-		ViewMode last_render_mode = ViewMode::SinglePage;
+		ViewMode last_render_mode = ViewMode::Invalid;
 
 		std::map<int, std::vector<int>> double_pages;
-		int current_double_page_index = 0;
 		bool double_paging_change = false;
 
 		float scroll_speed = 1000.f;
@@ -87,8 +86,6 @@ class ImageViewerApp
 			{
 				if (std::find(tag_double_pages.begin(), tag_double_pages.end(), curr_image_index) == tag_double_pages.end())
 					curr_image_index--;
-
-				current_double_page_index = std::find(tag_double_pages.begin(), tag_double_pages.end(), curr_image_index) - tag_double_pages.begin();
 
 				double_paging_change = true;
 			}
@@ -244,6 +241,17 @@ class ImageViewerApp
 
 				std::cout << "current_image=\"" << current_image() << '"' << std::endl;
 			}
+			if (mode != last_render_mode)
+			{
+				std::string mode_str;
+				if (mode == ViewMode::SinglePage)
+					mode_str = "single";
+				else if (mode == ViewMode::DoublePage)
+					mode_str = "double";
+				else if (mode == ViewMode::DoublePageManga)
+					mode_str = "manga";
+				std::cout << "current_mode=" << mode_str << std::endl;
+			}
 
 			prepare_render();
 			for (const auto& sprite : sprites)
@@ -303,6 +311,8 @@ class ImageViewerApp
 							if (event.key.code == sf::Keyboard::BackSpace)
 								offset = -1;
 
+							const auto& current_double_pages = double_pages[curr_tag_images->first];
+							int current_double_page_index = std::find(current_double_pages.begin(), current_double_pages.end(), curr_image_index) - current_double_pages.begin();
 							current_double_page_index += offset;
 
 							int corrected_index = std::clamp(current_double_page_index, 0, (int)double_pages[curr_tag_images->first].size() - 1);
@@ -325,8 +335,7 @@ class ImageViewerApp
 								}
 							}
 
-							current_double_page_index = corrected_index;
-							curr_image_index = double_pages[curr_tag_images->first][current_double_page_index];
+							curr_image_index = double_pages[curr_tag_images->first][corrected_index];
 						}
 						else
 						{
@@ -424,8 +433,6 @@ class ImageViewerApp
 							const auto& current_double_pages = double_pages[tag];
 							if (std::find(current_double_pages.begin(), current_double_pages.end(), curr_image_index) == current_double_pages.end())
 								curr_image_index--;
-
-							current_double_page_index = std::find(current_double_pages.begin(), current_double_pages.end(), curr_image_index) - current_double_pages.begin();
 						}
 					}
 					else
@@ -451,6 +458,13 @@ class ImageViewerApp
 					if (image_iter != tag_images_vec.end())
 					{
 						curr_image_index = image_iter - tag_images_vec.begin();
+
+						if (mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga)
+						{
+							const auto& current_double_pages = double_pages[tag];
+							if (std::find(current_double_pages.begin(), current_double_pages.end(), curr_image_index) == current_double_pages.end())
+								curr_image_index--;
+						}
 					}
 					else
 						std::cerr << args[0] << " not present on tag " << tag << std::endl;
