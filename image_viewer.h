@@ -32,6 +32,7 @@ class ImageViewerApp
 
 		std::map<int, std::vector<int>> double_pages;
 		int current_double_page_index = 0;
+		bool double_paging_change = false;
 
 		float scroll_speed = 1000.f;
 
@@ -88,6 +89,8 @@ class ImageViewerApp
 					curr_image_index--;
 
 				current_double_page_index = std::find(tag_double_pages.begin(), tag_double_pages.end(), curr_image_index) - tag_double_pages.begin();
+
+				double_paging_change = true;
 			}
 		}
 
@@ -119,7 +122,6 @@ class ImageViewerApp
 				texture_wide[first_changed_image] = 2;
 
 			update_double_pages_from(current_tag, first_changed_index);
-			last_render_image_index = curr_image_index - 1; //HACK TO ALLOW REDRAWING
 		}
 
 		sf::Texture& load_texture(const std::string& image_path)
@@ -180,7 +182,7 @@ class ImageViewerApp
 					for (auto[tag, images_vec] : images)
 						update_double_pages_from(tag, 0);
 
-				if (image_changed || mode_changed)
+				if (image_changed || mode_changed || double_paging_change)
 				{
 					loaded_textures.clear();
 					sprites.clear();
@@ -250,6 +252,7 @@ class ImageViewerApp
 			last_render_image_index = curr_image_index;
 			last_render_mode = mode;
 			reset_view = false;
+			double_paging_change = false;
 		}
 
 		void change_mode(ViewMode new_mode)
