@@ -1,8 +1,10 @@
 #pragma once
 
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <SFML/Graphics.hpp>
@@ -36,6 +38,26 @@ class ImageViewerApp
 		float scroll_speed = 1000.f;
 
 		bool reset_view = true;
+
+		std::map<int, std::string> user_bindings;
+
+		void load_config(const std::string& config_path)
+		{
+			char binding;
+			std::string command;
+
+			std::ifstream stream(config_path);
+
+			while (stream >> binding)
+			{
+				std::getline(stream, command);
+				auto str_begin = command.find_first_not_of(" ");
+				command = command.substr(str_begin);
+
+				int key = sf::Keyboard::Key::A + (binding - 'a');
+				user_bindings[key] = command;
+			}
+		}
 
 		void update_double_pages_from(int tag, int new_index)
 		{
@@ -289,20 +311,7 @@ class ImageViewerApp
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
-					if (event.key.code == sf::Keyboard::Q)
-						window.close();
-					else if (event.key.code == sf::Keyboard::S)
-						change_mode(ViewMode::SinglePage);
-					else if (event.key.code == sf::Keyboard::D)
-						change_mode(ViewMode::DoublePage);
-					else if (event.key.code == sf::Keyboard::M)
-						change_mode(ViewMode::DoublePageManga);
-					//else if (event.key.code == sf::Keyboard::V)
-					//	change_mode(ViewMode::ContinuousVert);
-					else if (event.key.code == sf::Keyboard::C &&
-							(mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga))
-						fix_double_pages();
-					else if ((event.key.code == sf::Keyboard::Space ||
+					if ((event.key.code == sf::Keyboard::Space ||
 							event.key.code == sf::Keyboard::BackSpace) && !images.empty())
 					{
 						if (mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga)
@@ -364,12 +373,34 @@ class ImageViewerApp
 							curr_image_index = corrected_index;
 						}
 					}
+					else
+					{
+						auto it = user_bindings.find((int)event.key.code);
+						if (it != user_bindings.end())
+						{
+							run_command(it->second);
+						}
+					}
 				}
 			}
 		}
 
-		void run_action(std::string_view action, const std::vector<std::string>& args)
+		void run_command(std::string_view cmd)
 		{
+			std::string_view action(cmd.begin(), cmd.begin() + cmd.find('('));
+
+			std::vector<std::string> args;
+			auto arg_begin = cmd.begin() + action.length() + 1;
+			while (arg_begin != cmd.end())
+			{
+				auto next_sep_iter = std::find(arg_begin, cmd.end(), ',');
+				if (next_sep_iter == cmd.end())
+					next_sep_iter--;
+
+				args.emplace_back(arg_begin, next_sep_iter);
+				arg_begin = next_sep_iter + 1;
+			}
+
 			if (action == "add_image")
 			{
 				if (sf::Texture tex; tex.loadFromFile(args[0]))
@@ -395,15 +426,6 @@ class ImageViewerApp
 
 					if (mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga)
 						update_double_pages_from(tag, new_iter - tag_images_vec.begin());
-
-					//for (auto[tag, image_vec] : images)
-					//{
-					//	for (auto image : image_vec)
-					//	{
-					//		std::cerr << "TAG " << tag << " : " << image << '\n';
-					//	}
-					//}
-					//std::cerr << std::endl;
 				}
 			}
 			else if (action == "goto_image_byindex")
@@ -516,6 +538,27 @@ class ImageViewerApp
 				else
 					std::cerr << args[0] << "is not a valid mode" << std::endl;
 			}
+			else if (action == "repage")
+			{
+				if (mode != ViewMode::DoublePage && mode != ViewMode::DoublePageManga)
+					std::cerr << "repaging only with double page layout" << std::endl;
+				else
+					fix_double_pages();
+			}
+			else if (action == "output_image_list")
+			{
+				for (const auto& [tag, vec] : images)
+				{
+					for (const auto& image : vec)
+					{
+						std::cout << "tag " << tag << " - " << image << std::endl;
+					}
+				}
+			}
+			else if (action == "output_string")
+				std::cout << args[0] << std::endl;
+			else if (action == "quit")
+				window.close();
 			else
 			{
 				std::cerr << action << " is not a valid command" << std::endl;
@@ -528,32 +571,22 @@ class ImageViewerApp
 			{
 				std::string cmd;
 				std::getline(std::cin, cmd);
-				std::string_view action(cmd.begin(), cmd.begin() + cmd.find('('));
 
-				std::vector<std::string> args;
-				auto arg_begin = cmd.begin() + action.length() + 1;
-				while (arg_begin != cmd.end())
-				{
-					auto next_sep_iter = std::find(arg_begin, cmd.end(), ',');
-					if (next_sep_iter == cmd.end())
-						next_sep_iter--;
-
-					args.emplace_back(arg_begin, next_sep_iter);
-					arg_begin = next_sep_iter + 1;
-				}
-
-				run_action(action, args);
+				run_command(cmd);
 			}
 		}
 
 	public:
-		ImageViewerApp()
+		ImageViewerApp(std::string config_path = std::string())
 		{
 			sf::ContextSettings settings;
 			settings.antialiasingLevel = 8;
 			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default, settings);
 			//window.setKeyRepeatEnabled(false);
 			window.setFramerateLimit(60);
+
+			if (!config_path.empty())
+				load_config(config_path);
 
 			std::cin.sync_with_stdio(false);
 		}

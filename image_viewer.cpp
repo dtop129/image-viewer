@@ -5,9 +5,12 @@
 
 #include "image_viewer.h"
 
-int main()
+int main(int argc, char** argv)
 {
-	ImageViewerApp app;
+	std::string config_path;
+	if (argc == 2)
+		config_path = argv[1];
+	ImageViewerApp app(config_path);
 	app.run();
 	return 0;
 }
