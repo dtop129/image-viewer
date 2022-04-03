@@ -21,7 +21,7 @@ class ImageViewerApp
 
 		std::map<int, std::vector<std::string>> images;
 		std::map<std::string, int> image_tags;
-		std::map<std::string, sf::Vector2f> texture_sizes;
+		std::map<std::string, bool> texture_wide;
 		std::map<std::string, sf::Texture> loaded_textures;
 
 		std::map<int, std::vector<std::string>>::iterator curr_tag_images;
@@ -35,11 +35,6 @@ class ImageViewerApp
 		bool image_changed = false;
 		bool mode_changed = true;
 		bool reset_view = true;
-
-		void create_double_pages(int tag) //MAYBE CREATE FUNCTION TO UPDATE DOUBLE PAGES; RESPECTING THE FIXES
-		{
-			update_double_pages_from(tag, 0);
-		}
 
 		void update_double_pages_from(int tag, int new_index)
 		{
@@ -71,10 +66,7 @@ class ImageViewerApp
 			for (auto it = images_vec.begin() + new_index; it != images_vec.end(); ++it)
 			{
 				distance_from_last++;
-
-				const auto& image = *it;
-				const auto& size = texture_sizes[image];
-				bool is_wide = size.x > size.y;
+				bool is_wide = texture_wide[*it];
 
 				if (is_wide)
 					distance_from_last++;
@@ -104,17 +96,14 @@ class ImageViewerApp
 			int current_tag = curr_tag_images->first;
 			auto& current_double_pages = double_pages[current_tag];
 
-			const auto& current_size = texture_sizes[current_image()];
-			if (current_size.x > current_size.y)
+			if (texture_wide[current_image()])
 				return;
 
 			auto begin_wide_page = current_double_pages.begin() - 1;
 			for (auto it = std::find(current_double_pages.rbegin(), current_double_pages.rend(), curr_image_index) + 1; it != current_double_pages.rend(); ++it)
 			{
 				const auto& image = images[current_tag][*it];
-				const auto& size = texture_sizes[image];
-
-				if (size.x > size.y)
+				if (texture_wide[image])
 				{
 					begin_wide_page = (it + 1).base();
 					break;
@@ -125,9 +114,7 @@ class ImageViewerApp
 			for (auto it = begin_wide_page + 1; it != current_double_pages.end(); ++it)
 			{
 				const auto& image = images[current_tag][*it];
-				const auto& size = texture_sizes[image];
-
-				if (size.x > size.y)
+				if (texture_wide[image])
 				{
 					end_wide_page = it;
 					break;
@@ -217,7 +204,7 @@ class ImageViewerApp
 				int current_tag = curr_tag_images->first;
 				if (mode_changed)
 					for (auto[tag, images_vec] : images)
-						create_double_pages(tag);
+						update_double_pages_from(tag, 0);
 
 				if (image_changed)
 				{
@@ -415,7 +402,7 @@ class ImageViewerApp
 				if (sf::Texture tex; tex.loadFromFile(args[0]))
 				{
 					tex.setSmooth(true);
-					texture_sizes[args[0]] = static_cast<sf::Vector2f>(tex.getSize());
+					texture_wide[args[0]] = tex.getSize().x > tex.getSize().y;
 
 					int tag = 0;
 					if (args.size() == 2)
