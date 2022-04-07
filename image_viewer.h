@@ -62,17 +62,17 @@ class ImageViewerApp
 
 		int get_double_page_index(int image_index) const
 		{
-			auto it = double_pages.find(current_tag());
+			auto it = double_pages.find(curr_tag());
 			if (it == double_pages.end())
 				return 0;
 
-			const auto& current_double_pages = it->second;
-			auto current_double_page_it = std::find_if(current_double_pages.begin(), current_double_pages.end(), [image_index](const auto& double_indices)
-					{
-						return std::find(double_indices.begin(), double_indices.end(), image_index) != double_indices.end();
-					});
+			const auto& curr_double_pages = it->second;
+			auto curr_double_page_it = std::find_if(curr_double_pages.begin(), curr_double_pages.end(), [image_index](const auto& double_indices)
+				{
+					return std::find(double_indices.begin(), double_indices.end(), image_index) != double_indices.end();
+				});
 
-			return current_double_page_it - current_double_pages.begin();
+			return curr_double_page_it - curr_double_pages.begin();
 		}
 
 
@@ -97,24 +97,7 @@ class ImageViewerApp
 				is_prev_wide = is_wide;
 			}
 
-			//for (auto& indices : tag_double_pages)
-			//	std::sort(indices.begin(), indices.end());
-			//std::sort(tag_double_pages.begin(), tag_double_pages.end(), [](const auto& indices1, const auto& indices2) { return indices1.front() < indices2.front(); });
-
-			//for (const auto& double_indices : tag_double_pages)
-			//{
-			//	std::cout << '[';
-			//	std::string delim = "";
-			//	for (auto index : double_indices)
-			//	{
-			//		std::cout << delim << index;
-			//		delim = ", ";
-			//	}
-			//	std::cout << "], ";
-			//}
-			//std::cout << std::endl;
-
-			if (tag == current_tag())
+			if (tag == curr_tag())
 				double_paging_change = true;
 		}
 
@@ -126,7 +109,7 @@ class ImageViewerApp
 			const auto&[curr_tag, curr_images] = *curr_tag_images;
 			auto& curr_double_pages = double_pages[curr_tag];
 
-			if (texture_wide[current_image()] == 1)
+			if (texture_wide[curr_image()] == 1)
 				return;
 
 			int begin_change_page;
@@ -162,7 +145,7 @@ class ImageViewerApp
 			return tex;
 		}
 
-		int current_tag() const
+		int curr_tag() const
 		{
 			if (images.empty())
 				return -1;
@@ -170,14 +153,14 @@ class ImageViewerApp
 			return curr_tag_images->first;
 		}
 
-		const std::string& current_image() const
+		const std::string& curr_image() const
 		{
 			return curr_tag_images->second[curr_image_index];
 		}
 
 		void prepare_render()
 		{
-			bool image_changed = curr_image_index != last_render_image_index || current_tag() != last_render_tag;
+			bool image_changed = curr_image_index != last_render_image_index || curr_tag() != last_render_tag;
 			bool mode_changed = mode != last_render_mode;
 
 			if (mode == ViewMode::SinglePage)
@@ -186,7 +169,7 @@ class ImageViewerApp
 				{
 					loaded_textures.clear();
 					sprites.clear();
-					sprites.emplace_back(load_texture(current_image()));
+					sprites.emplace_back(load_texture(curr_image()));
 				}
 
 				if (image_changed || reset_view || mode_changed)
@@ -213,16 +196,16 @@ class ImageViewerApp
 					loaded_textures.clear();
 					sprites.clear();
 
-					const auto& curr_double_pages = double_pages[current_tag()];
+					const auto& curr_double_pages = double_pages[curr_tag()];
 					int curr_double_index = get_double_page_index(curr_image_index);
 
 					int first_image_index = curr_double_pages[curr_double_index][0];
 
-					sprites.emplace_back(load_texture(images[current_tag()][first_image_index]));
+					sprites.emplace_back(load_texture(images[curr_tag()][first_image_index]));
 
 					if (curr_double_pages[curr_double_index].size() == 2)
 					{
-						sprites.emplace_back(load_texture(images[current_tag()][first_image_index + 1]));
+						sprites.emplace_back(load_texture(images[curr_tag()][first_image_index + 1]));
 
 						float scale_factor = sprites[0].getLocalBounds().height / sprites[1].getLocalBounds().height;
 						sprites[1].setScale(scale_factor, scale_factor);
@@ -260,16 +243,16 @@ class ImageViewerApp
 
 		void render()
 		{
-			if (curr_image_index != last_render_image_index || current_tag() != last_render_tag)
+			if (curr_image_index != last_render_image_index || curr_tag() != last_render_tag)
 			{
 				if (images.empty())
 					window.setTitle("no images loaded");
 				else
 				{
-					std::string title = std::to_string(current_tag()) + " - " + std::to_string(curr_image_index);
+					std::string title = std::to_string(curr_tag()) + " - " + curr_image();
 					window.setTitle(title);
 
-					std::cout << "current_image=\"" << current_image() << '"' << std::endl;
+					std::cout << "curr_image=\"" << curr_image() << '"' << std::endl;
 				}
 			}
 			if (mode != last_render_mode)
@@ -281,7 +264,7 @@ class ImageViewerApp
 					mode_str = "double";
 				else if (mode == ViewMode::DoublePageManga)
 					mode_str = "manga";
-				std::cout << "current_mode=" << mode_str << std::endl;
+				std::cout << "curr_mode=" << mode_str << std::endl;
 			}
 
 			if (!images.empty())
@@ -292,7 +275,7 @@ class ImageViewerApp
 			}
 
 			last_render_image_index = curr_image_index;
-			last_render_tag = current_tag();
+			last_render_tag = curr_tag();
 			last_render_mode = mode;
 			reset_view = false;
 			double_paging_change = false;
@@ -336,7 +319,7 @@ class ImageViewerApp
 							int double_index = get_double_page_index(curr_image_index);
 							double_index += offset;
 
-							int corrected_index = std::clamp(double_index, 0, (int)double_pages[current_tag()].size() - 1);
+							int corrected_index = std::clamp(double_index, 0, (int)double_pages[curr_tag()].size() - 1);
 							if (double_index != corrected_index)
 							{
 								if ((offset == 1 && std::next(curr_tag_images) == images.end()) || (offset == -1 && curr_tag_images == images.begin()))
@@ -348,11 +331,11 @@ class ImageViewerApp
 									if (offset == 1)
 										corrected_index = 0;
 									else
-										corrected_index = double_pages[current_tag()].size() - 1;
+										corrected_index = double_pages[curr_tag()].size() - 1;
 								}
 							}
 
-							curr_image_index = double_pages[current_tag()][corrected_index][0];
+							curr_image_index = double_pages[curr_tag()][corrected_index][0];
 						}
 						else
 						{
@@ -430,7 +413,7 @@ class ImageViewerApp
 						curr_image_index = 0;
 						curr_tag_images = images.find(tag);
 					}
-					else if (tag == current_tag() && new_index <= curr_image_index)
+					else if (tag == curr_tag() && new_index <= curr_image_index)
 					{
 						curr_image_index++;
 						last_render_image_index++;
@@ -443,7 +426,7 @@ class ImageViewerApp
 			else if (action == "goto_image_byindex")
 			{
 				int new_index = std::stoi(args[0]);
-				int tag = current_tag();
+				int tag = curr_tag();
 				if (args.size() == 2)
 					tag = std::stoi(args[1]);
 
@@ -468,7 +451,7 @@ class ImageViewerApp
 			}
 			else if (action == "goto_image_byname")
 			{
-				int tag = current_tag();
+				int tag = curr_tag();
 				if (args.size() == 2)
 					tag = std::stoi(args[1]);
 
@@ -502,7 +485,7 @@ class ImageViewerApp
 					}
 					else
 					{
-						if (tag == current_tag())
+						if (tag == curr_tag())
 						{
 							curr_image_index = 0;
 							if (std::next(curr_tag_images) != images.end())
