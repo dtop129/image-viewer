@@ -577,7 +577,7 @@ class ImageViewerApp
 			sf::ContextSettings settings;
 			settings.antialiasingLevel = 8;
 			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default, settings);
-			//window.setKeyRepeatEnabled(false);
+			window.setKeyRepeatEnabled(false);
 			window.setFramerateLimit(60);
 
 			if (!config_path.empty())
