@@ -260,8 +260,7 @@ class ImageViewerApp
 
 		void render()
 		{
-			if (curr_image_index != last_render_image_index
-					|| current_tag() != last_render_tag)
+			if (curr_image_index != last_render_image_index || current_tag() != last_render_tag)
 			{
 				if (images.empty())
 					window.setTitle("no images loaded");
