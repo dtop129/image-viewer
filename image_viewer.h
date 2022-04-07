@@ -36,18 +36,20 @@ class ImageViewerApp
 		std::map<int, std::vector<std::vector<int>>> double_pages;
 		bool double_paging_change = false;
 
+		std::string repage_save_file;
+
 		float scroll_speed = 1000.f;
 
 		bool reset_view = true;
 
 		std::map<int, std::string> user_bindings;
 
-		void load_config(const std::string& config_path)
+		void load_config(std::string_view config_path)
 		{
 			char binding;
 			std::string command;
 
-			std::ifstream stream(config_path);
+			std::ifstream stream = std::ifstream(std::string(config_path));
 
 			while (stream >> binding)
 			{
@@ -58,6 +60,16 @@ class ImageViewerApp
 				int key = sf::Keyboard::Key::A + (binding - 'a');
 				user_bindings[key] = command;
 			}
+		}
+
+		void load_repage_save(std::string_view save)
+		{
+			repage_save_file = save;
+			std::ifstream stream(repage_save_file);
+
+			std::string image;
+			while (std::getline(stream, image))
+				texture_wide[image] = 2;
 		}
 
 		int get_double_page_index(int image_index) const
@@ -249,7 +261,7 @@ class ImageViewerApp
 					window.setTitle("no images loaded");
 				else
 				{
-					std::string title = std::to_string(curr_tag()) + " - " + curr_image();
+					std::string title = std::to_string(curr_tag()) + " - " + curr_image() + "[" + std::to_string(curr_image_index + 1) + "/" + std::to_string(images[curr_tag()].size()) + "]";
 					window.setTitle(title);
 
 					std::cout << "current_image=\"" << curr_image() << '"' << std::endl;
@@ -264,6 +276,7 @@ class ImageViewerApp
 					mode_str = "double";
 				else if (mode == ViewMode::DoublePageManga)
 					mode_str = "manga";
+
 				std::cout << "current_mode=" << mode_str << std::endl;
 			}
 
@@ -281,11 +294,6 @@ class ImageViewerApp
 			double_paging_change = false;
 		}
 
-		void change_mode(ViewMode new_mode)
-		{
-			mode = new_mode;
-		}
-
 		void poll_events(float dt)
 		{
 			sf::Event event;
@@ -299,11 +307,6 @@ class ImageViewerApp
 					window_view.reset(sf::FloatRect(prevcorner, sf::Vector2f(event.size.width, event.size.height)));
 
 					reset_view = true;
-				}
-				else if (event.type == sf::Event::MouseWheelScrolled)
-				{
-					window_view.move(0, -scroll_speed * event.mouseWheelScroll.delta * dt);
-					window.setView(window_view);
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
@@ -397,7 +400,8 @@ class ImageViewerApp
 				if (sf::Texture tex; tex.loadFromFile(args[0]))
 				{
 					tex.setSmooth(true);
-					texture_wide[args[0]] = tex.getSize().x > tex.getSize().y;
+					if (!texture_wide.contains(args[0]))
+						texture_wide[args[0]] = tex.getSize().x > tex.getSize().y;
 
 					int tag = 0;
 					if (args.size() == 2)
@@ -405,8 +409,8 @@ class ImageViewerApp
 
 					auto& tag_images_vec = images[tag];
 
-					auto it = tag_images_vec.insert(std::upper_bound(tag_images_vec.begin(), tag_images_vec.end(), args[0]), args[0]);
-					int new_index = it - tag_images_vec.begin();
+					auto inserted_it = tag_images_vec.insert(std::upper_bound(tag_images_vec.begin(), tag_images_vec.end(), args[0]), args[0]);
+					int new_index = inserted_it - tag_images_vec.begin();
 
 					if (images.size() == 1 && tag_images_vec.size() == 1)
 					{
@@ -504,11 +508,11 @@ class ImageViewerApp
 			else if (action == "change_mode")
 			{
 				if (args[0] == "single")
-					change_mode(ViewMode::SinglePage);
+					mode = ViewMode::SinglePage;
 				else if (args[0] == "double")
-					change_mode(ViewMode::DoublePage);
+					mode = ViewMode::DoublePage;
 				else if (args[0] == "manga")
-					change_mode(ViewMode::DoublePageManga);
+					mode = ViewMode::DoublePageManga;
 				//else if (args[0] == "vert")
 				//	change_mode(ViewMode::ContinuousVert);
 				else
@@ -553,7 +557,7 @@ class ImageViewerApp
 		}
 
 	public:
-		ImageViewerApp(std::string config_path = std::string())
+		ImageViewerApp(std::string_view config_path, std::string_view save_path)
 		{
 			sf::ContextSettings settings;
 			settings.antialiasingLevel = 8;
@@ -563,8 +567,18 @@ class ImageViewerApp
 
 			if (!config_path.empty())
 				load_config(config_path);
+			if (!save_path.empty())
+				load_repage_save(save_path);
 
 			std::cin.sync_with_stdio(false);
+		}
+
+		~ImageViewerApp()
+		{
+			std::ofstream repage_file(repage_save_file);
+			for (const auto&[image, wide] : texture_wide)
+				if (wide == 2)
+					repage_file << image << std::endl;
 		}
 
 		void run()
