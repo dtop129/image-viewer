@@ -36,6 +36,8 @@ class ImageViewerApp
 		std::map<int, std::vector<std::vector<int>>> double_pages;
 		bool double_paging_change = false;
 
+		float wide_factor;
+
 		std::string repage_save_file;
 
 		bool reset_view = true;
@@ -124,7 +126,7 @@ class ImageViewerApp
 				return;
 
 			int begin_change_page;
-			for (begin_change_page = get_double_page_index(image_index); begin_change_page > 0; --begin_change_page)
+			for (begin_change_page = get_double_page_index(image_index); begin_change_page >= 0; --begin_change_page)
 			{
 				const auto& image = tag_images[tag_double_pages[begin_change_page][0]];
 				if (texture_wide[image] == 1)
@@ -133,6 +135,7 @@ class ImageViewerApp
 					break;
 				}
 			}
+			begin_change_page = std::max(0, begin_change_page);
 
 			int first_changed_index = tag_double_pages[begin_change_page][0];
 			auto first_changed_image = tag_images[first_changed_index];
@@ -401,8 +404,9 @@ class ImageViewerApp
 				if (sf::Texture tex; tex.loadFromFile(args[0]))
 				{
 					tex.setSmooth(true);
-					if (!texture_wide.contains(args[0]) || tex.getSize().x >= tex.getSize().y)
-						texture_wide[args[0]] = tex.getSize().x >= tex.getSize().y;
+					bool is_wide = tex.getSize().x > (tex.getSize().y * wide_factor);
+					if (!texture_wide.contains(args[0]) || is_wide)
+						texture_wide[args[0]] = is_wide;
 
 					int tag = 0;
 					if (args.size() == 2)
@@ -568,7 +572,7 @@ class ImageViewerApp
 		}
 
 	public:
-		ImageViewerApp(std::string_view config_path, std::string_view save_path)
+		ImageViewerApp(std::string_view config_path, std::string_view save_path, float wide_fact)
 		{
 			sf::ContextSettings settings;
 			settings.antialiasingLevel = 8;
@@ -580,6 +584,8 @@ class ImageViewerApp
 				load_config(config_path);
 			if (!save_path.empty())
 				load_repage_save(save_path);
+
+			wide_factor = wide_fact;
 
 			std::cin.sync_with_stdio(false);
 		}
