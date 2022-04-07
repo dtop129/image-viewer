@@ -252,7 +252,7 @@ class ImageViewerApp
 					std::string title = std::to_string(curr_tag()) + " - " + curr_image();
 					window.setTitle(title);
 
-					std::cout << "curr_image=\"" << curr_image() << '"' << std::endl;
+					std::cout << "current_image=\"" << curr_image() << '"' << std::endl;
 				}
 			}
 			if (mode != last_render_mode)
@@ -264,7 +264,7 @@ class ImageViewerApp
 					mode_str = "double";
 				else if (mode == ViewMode::DoublePageManga)
 					mode_str = "manga";
-				std::cout << "curr_mode=" << mode_str << std::endl;
+				std::cout << "current_mode=" << mode_str << std::endl;
 			}
 
 			if (!images.empty())
