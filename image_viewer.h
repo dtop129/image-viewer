@@ -72,9 +72,9 @@ class ImageViewerApp
 				texture_wide[image] = 2;
 		}
 
-		int get_double_page_index(int image_index) const
+		int get_double_page_index(int image_index, int tag) const
 		{
-			auto it = double_pages.find(curr_tag());
+			auto it = double_pages.find(tag);
 			if (it == double_pages.end())
 				return 0;
 
@@ -126,7 +126,7 @@ class ImageViewerApp
 				return;
 
 			int begin_change_page;
-			for (begin_change_page = get_double_page_index(image_index); begin_change_page >= 0; --begin_change_page)
+			for (begin_change_page = get_double_page_index(image_index, tag); begin_change_page >= 0; --begin_change_page)
 			{
 				const auto& image = tag_images[tag_double_pages[begin_change_page][0]];
 				if (texture_wide[image] == 1)
