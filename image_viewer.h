@@ -211,7 +211,7 @@ class ImageViewerApp
 					sprites.clear();
 
 					const auto& curr_double_pages = double_pages[curr_tag()];
-					int curr_double_index = get_double_page_index(curr_image_index);
+					int curr_double_index = get_double_page_index(curr_image_index, curr_tag());
 
 					int first_image_index = curr_double_pages[curr_double_index][0];
 
@@ -252,6 +252,9 @@ class ImageViewerApp
 					window_view.zoom(std::max(zoom_x, zoom_y));
 					window.setView(window_view);
 				}
+			}
+			else if (mode == ViewMode::ContinuousVert)
+			{
 			}
 		}
 
@@ -321,7 +324,7 @@ class ImageViewerApp
 							if (event.key.code == sf::Keyboard::BackSpace)
 								offset = -1;
 
-							int double_index = get_double_page_index(curr_image_index);
+							int double_index = get_double_page_index(curr_image_index, curr_tag());
 							double_index += offset;
 
 							int corrected_index = std::clamp(double_index, 0, (int)double_pages[curr_tag()].size() - 1);
@@ -373,9 +376,7 @@ class ImageViewerApp
 					{
 						auto it = user_bindings.find((int)event.key.code);
 						if (it != user_bindings.end())
-						{
 							run_command(it->second);
-						}
 					}
 				}
 			}
@@ -518,8 +519,8 @@ class ImageViewerApp
 					mode = ViewMode::DoublePage;
 				else if (args[0] == "manga")
 					mode = ViewMode::DoublePageManga;
-				//else if (args[0] == "vert")
-				//	change_mode(ViewMode::ContinuousVert);
+				else if (args[0] == "vert")
+					mode = ViewMode::ContinuousVert;
 				else
 					std::cerr << args[0] << "is not a valid mode" << std::endl;
 			}
