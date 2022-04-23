@@ -3,10 +3,13 @@
 #include <string>
 #include <string_view>
 
+#include <Magick++.h>
+
 #include "image_viewer.h"
 
 int main(int argc, char* argv[])
 {
+	Magick::InitializeMagick(*argv);
 	std::string config_path;
 	std::string save_file;
 	float wide_fac = 1.f;

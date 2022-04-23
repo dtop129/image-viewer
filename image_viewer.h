@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <SFML/Graphics.hpp>
+#include <Magick++.h>
 
 enum class ViewMode { SinglePage, DoublePage, DoublePageManga, ContinuousVert, Invalid };
 
@@ -24,6 +25,7 @@ class ImageViewerApp
 		std::map<int, std::vector<std::string>> images;
 		std::map<std::string, int> image_tags;
 		std::map<std::string, int> texture_wide;
+		std::map<std::string, sf::Vector2f> texture_size;
 		std::map<std::string, sf::Texture> loaded_textures;
 
 		std::map<int, std::vector<std::string>>::iterator curr_tag_images;
@@ -148,14 +150,19 @@ class ImageViewerApp
 			update_double_pages(tag);
 		}
 
-		sf::Texture& load_texture(const std::string& image_path)
+		sf::Texture& load_texture(const std::string& image_path, float scale = 1.f)
 		{
-			auto tex_iter = loaded_textures.find(image_path);
-			if (tex_iter != loaded_textures.end())
-				return tex_iter->second;
+			Magick::Image image(image_path);
+			image.magick("RGBA");
+			image.filterType(Magick::FilterTypes::LanczosFilter);
+			image.resize(Magick::Geometry(image.columns() * scale, image.rows() * window.getSize().y * scale));
+			Magick::Blob blob;
+			image.write(&blob);
+			sf::Image sf_image;
+			sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
 
 			auto& tex = loaded_textures[image_path];
-			tex.loadFromFile(image_path);
+			tex.loadFromImage(sf_image);
 			return tex;
 		}
 
@@ -179,23 +186,19 @@ class ImageViewerApp
 
 			if (mode == ViewMode::SinglePage)
 			{
-				if (image_changed || mode_changed)
-				{
-					loaded_textures.clear();
-					sprites.clear();
-					sprites.emplace_back(load_texture(curr_image()));
-				}
-
 				if (image_changed || reset_view || mode_changed)
 				{
-					auto drawn_size = sf::Vector2f(sprites[0].getGlobalBounds().width, sprites[0].getGlobalBounds().height);
+					auto tex_size = texture_size[curr_image()];
 
-					window_view.setSize(sf::Vector2f(window.getSize()));
-					float zoom_x = drawn_size.x / window_view.getSize().x;
-					float zoom_y = drawn_size.y / window_view.getSize().y;
-					window_view.setCenter(drawn_size / 2.f);
-					window_view.zoom(std::max(zoom_x, zoom_y));
+					float scale_x = window_view.getSize().x / tex_size.x;
+					float scale_y = window_view.getSize().y / tex_size.y;
+					float scale = std::min(scale_x, scale_y);
+					window_view.setCenter(tex_size * scale / 2.f);
 					window.setView(window_view);
+
+					loaded_textures.clear();
+					sprites.clear();
+					sprites.emplace_back(load_texture(curr_image(), scale));
 				}
 			}
 			else if (mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga)
@@ -204,43 +207,45 @@ class ImageViewerApp
 					for (auto[tag, images_vec] : images)
 						update_double_pages(tag);
 
-				if (image_changed || mode_changed || double_paging_change)
+				if (image_changed || mode_changed || reset_view || double_paging_change)
 				{
-					loaded_textures.clear();
-					sprites.clear();
-
 					const auto& curr_double_pages = double_pages[curr_tag()];
 					int curr_double_index = get_double_page_index(curr_image_index, curr_tag());
 
 					int first_image_index = curr_double_pages[curr_double_index][0];
 
-					sprites.emplace_back(load_texture(images[curr_tag()][first_image_index]));
+					float scale2 = 1.f;
+					sf::Vector2f double_tex_size;
+					double_tex_size = texture_size[images[curr_tag()][first_image_index]];
+					if (curr_double_pages[curr_double_index].size() == 2)
+					{
+						int second_image_index = curr_double_pages[curr_double_index][1];
+
+						scale2 = double_tex_size.y / texture_size[images[curr_tag()][second_image_index]].y;
+						double_tex_size.x += texture_size[images[curr_tag()][second_image_index]].x * scale2;
+					}
+
+					float scale_x = window_view.getSize().x / double_tex_size.x;
+					float scale_y = window_view.getSize().y / double_tex_size.y;
+					float scale = std::min(scale_x, scale_y);
+					window_view.setCenter(double_tex_size * scale / 2.f);
+					window.setView(window_view);
+
+					loaded_textures.clear();
+					sprites.clear();
+
+					sprites.emplace_back(load_texture(images[curr_tag()][first_image_index], scale));
 
 					if (curr_double_pages[curr_double_index].size() == 2)
 					{
-						sprites.emplace_back(load_texture(images[curr_tag()][first_image_index + 1]));
-
-						float scale_factor = sprites[0].getLocalBounds().height / sprites[1].getLocalBounds().height;
-						sprites[1].setScale(scale_factor, scale_factor);
+						int second_image_index = curr_double_pages[curr_double_index][1];
+						sprites.emplace_back(load_texture(images[curr_tag()][second_image_index], scale * scale2));
 
 						if (mode == ViewMode::DoublePageManga)
 							sprites[0].move(sprites[1].getGlobalBounds().width, 0);
+						else
+							sprites[1].move(sprites[0].getGlobalBounds().width, 0);
 					}
-				}
-
-				if (image_changed || mode_changed || reset_view || double_paging_change)
-				{
-					sf::Vector2f drawn_size;
-					drawn_size.y = sprites[0].getGlobalBounds().height;
-					for (const auto& sprite : sprites)
-						drawn_size.x += sprite.getGlobalBounds().width;
-
-					window_view.setSize(sf::Vector2f(window.getSize()));
-					float zoom_x = drawn_size.x / window_view.getSize().x;
-					float zoom_y = drawn_size.y / window_view.getSize().y;
-					window_view.setCenter(drawn_size / 2.f);
-					window_view.zoom(std::max(zoom_x, zoom_y));
-					window.setView(window_view);
 				}
 			}
 			else if (mode == ViewMode::ContinuousVert)
@@ -297,7 +302,10 @@ class ImageViewerApp
 				if (event.type == sf::Event::Closed)
 					window.close();
 				else if (event.type == sf::Event::Resized)
+				{
+					window_view.setSize(event.size.width, event.size.height);
 					reset_view = true;
+				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
 					if ((event.key.code == sf::Keyboard::Space ||
@@ -393,6 +401,8 @@ class ImageViewerApp
 					bool is_wide = tex.getSize().x > (tex.getSize().y * wide_factor);
 					if (!texture_wide.contains(args[0]) || is_wide)
 						texture_wide[args[0]] = is_wide;
+
+					texture_size[args[0]] = (sf::Vector2f)tex.getSize();
 
 					int tag = 0;
 					if (args.size() == 2)
