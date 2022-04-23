@@ -188,13 +188,12 @@ class ImageViewerApp
 
 				if (image_changed || reset_view || mode_changed)
 				{
-					auto drawn_rect = sprites[0].getGlobalBounds();
-					auto sprite_center = sf::Vector2f(drawn_rect.left + drawn_rect.width / 2.f, drawn_rect.top + drawn_rect.height / 2.f);
+					auto drawn_size = sf::Vector2f(sprites[0].getGlobalBounds().width, sprites[0].getGlobalBounds().height);
 
-					float zoom_x = drawn_rect.width / window_view.getSize().x;
-					float zoom_y = drawn_rect.height / window_view.getSize().y;
-
-					window_view.setCenter(sprite_center);
+					window_view.setSize(sf::Vector2f(window.getSize()));
+					float zoom_x = drawn_size.x / window_view.getSize().x;
+					float zoom_y = drawn_size.y / window_view.getSize().y;
+					window_view.setCenter(drawn_size / 2.f);
 					window_view.zoom(std::max(zoom_x, zoom_y));
 					window.setView(window_view);
 				}
@@ -224,31 +223,22 @@ class ImageViewerApp
 						float scale_factor = sprites[0].getLocalBounds().height / sprites[1].getLocalBounds().height;
 						sprites[1].setScale(scale_factor, scale_factor);
 
-						int offset = sprites[0].getGlobalBounds().width;
 						if (mode == ViewMode::DoublePageManga)
-							offset = -sprites[1].getGlobalBounds().width;
-						sprites[1].move(offset, 0);
+							sprites[0].move(sprites[1].getGlobalBounds().width, 0);
 					}
 				}
 
 				if (image_changed || mode_changed || reset_view || double_paging_change)
 				{
-					sf::FloatRect drawn_rect;
+					sf::Vector2f drawn_size;
+					drawn_size.y = sprites[0].getGlobalBounds().height;
 					for (const auto& sprite : sprites)
-					{
-						auto sprite_rect = sprite.getGlobalBounds();
-						drawn_rect.left = std::min(sprite_rect.left, drawn_rect.left);
-						drawn_rect.top = std::min(sprite_rect.top, drawn_rect.top);
-						drawn_rect.width += sprite_rect.width;
-						drawn_rect.height = std::max(sprite_rect.height, drawn_rect.height);
-					}
+						drawn_size.x += sprite.getGlobalBounds().width;
 
-					auto sprite_center = sf::Vector2f(drawn_rect.left + drawn_rect.width / 2.f, drawn_rect.top + drawn_rect.height / 2.f);
-
-					float zoom_x = drawn_rect.width / window_view.getSize().x;
-					float zoom_y = drawn_rect.height / window_view.getSize().y;
-
-					window_view.setCenter(sprite_center);
+					window_view.setSize(sf::Vector2f(window.getSize()));
+					float zoom_x = drawn_size.x / window_view.getSize().x;
+					float zoom_y = drawn_size.y / window_view.getSize().y;
+					window_view.setCenter(drawn_size / 2.f);
 					window_view.zoom(std::max(zoom_x, zoom_y));
 					window.setView(window_view);
 				}
@@ -307,12 +297,7 @@ class ImageViewerApp
 				if (event.type == sf::Event::Closed)
 					window.close();
 				else if (event.type == sf::Event::Resized)
-				{
-					sf::Vector2f prevcorner = window_view.getCenter() - window_view.getSize() / 2.f;
-					window_view.reset(sf::FloatRect(prevcorner, sf::Vector2f(event.size.width, event.size.height)));
-
 					reset_view = true;
-				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
 					if ((event.key.code == sf::Keyboard::Space ||
