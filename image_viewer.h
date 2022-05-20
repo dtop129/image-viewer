@@ -154,7 +154,6 @@ class ImageViewerApp
 		{
 			Magick::Image image(image_path);
 			image.magick("RGBA");
-			image.filterType(Magick::FilterTypes::LanczosFilter);
 			image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
 			Magick::Blob blob;
 			image.write(&blob);

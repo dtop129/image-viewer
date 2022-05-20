@@ -10,7 +10,7 @@ OBJS = image_viewer.o
 image_viewer: $(OBJS)
 	g++ -o $@ $(OBJS) $(CXXFLAGS) $(LIBS)
 
-install:
+install: image_viewer
 	cp -f image_viewer /usr/local/bin
 
 clean:
