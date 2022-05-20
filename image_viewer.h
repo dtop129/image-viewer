@@ -29,10 +29,10 @@ class ImageViewerApp
 		std::map<std::string, sf::Texture> loaded_textures;
 
 		std::map<int, std::vector<std::string>>::iterator curr_tag_images;
-		int curr_image_index = -1;
+		int curr_image_index = 0;
 
 		int last_render_tag = 0;
-		int last_render_image_index = 0;
+		int last_render_image_index = -1;
 		ViewMode last_render_mode = ViewMode::Invalid;
 
 		std::map<int, std::vector<std::vector<int>>> double_pages;
