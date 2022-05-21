@@ -569,9 +569,7 @@ class ImageViewerApp
 	public:
 		ImageViewerApp(std::string_view config_path, std::string_view save_path, float wide_fact)
 		{
-			sf::ContextSettings settings;
-			settings.antialiasingLevel = 8;
-			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default, settings);
+			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
 			window.setFramerateLimit(60);
 
