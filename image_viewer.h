@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -392,40 +393,47 @@ class ImageViewerApp
 				arg_begin = next_sep_iter + 1;
 			}
 
-			if (action == "add_image")
+			if (action == "add_images")
 			{
-				if (sf::Texture tex; tex.loadFromFile(args[0]))
+				int tag = 0;
+				if (args.size() > 1)
+					tag = std::stoi(args[0]);
+
+				for (int i = (args.size() > 1); i < (int)args.size(); ++i)
 				{
-					tex.setSmooth(true);
-					bool is_wide = tex.getSize().x > (tex.getSize().y * wide_factor);
-					if (!texture_wide.contains(args[0]) || is_wide)
-						texture_wide[args[0]] = is_wide;
+					auto image_path = std::regex_replace(args[i], std::regex("^ +| +$"), "$1");
+					if (image_path.empty())
+						continue;
 
-					texture_size[args[0]] = (sf::Vector2f)tex.getSize();
-
-					int tag = 0;
-					if (args.size() == 2)
-						tag = std::stoi(args[1]);
-
-					auto& tag_images_vec = images[tag];
-
-					auto inserted_it = tag_images_vec.insert(std::upper_bound(tag_images_vec.begin(), tag_images_vec.end(), args[0]), args[0]);
-					int new_index = inserted_it - tag_images_vec.begin();
-
-					if (images.size() == 1 && tag_images_vec.size() == 1)
+					if (sf::Texture tex; tex.loadFromFile(image_path))
 					{
-						curr_image_index = 0;
-						curr_tag_images = images.find(tag);
-					}
-					else if (tag == curr_tag() && new_index <= curr_image_index)
-					{
-						curr_image_index++;
-						last_render_image_index++;
-					}
+						tex.setSmooth(true);
+						bool is_wide = tex.getSize().x > (tex.getSize().y * wide_factor);
+						if (!texture_wide.contains(image_path) || is_wide)
+							texture_wide[image_path] = is_wide;
 
-					if (mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga)
-						update_double_pages(tag);
+						texture_size[image_path] = (sf::Vector2f)tex.getSize();
+
+						auto& tag_images_vec = images[tag];
+
+						auto inserted_it = tag_images_vec.insert(std::upper_bound(tag_images_vec.begin(), tag_images_vec.end(), image_path), image_path);
+						int new_index = inserted_it - tag_images_vec.begin();
+
+						if (images.size() == 1 && tag_images_vec.size() == 1)
+						{
+							curr_image_index = 0;
+							curr_tag_images = images.find(tag);
+						}
+						else if (tag == curr_tag() && new_index <= curr_image_index)
+						{
+							curr_image_index++;
+							last_render_image_index++;
+						}
+					}
 				}
+
+				if (mode == ViewMode::DoublePage || mode == ViewMode::DoublePageManga)
+					update_double_pages(tag);
 			}
 			else if (action == "goto_image_byindex")
 			{
