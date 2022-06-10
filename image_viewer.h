@@ -101,15 +101,29 @@ class ImageViewerApp
 			auto& tag_double_pages = double_pages[tag];
 
 			tag_double_pages.clear();
-			int is_prev_wide = true;
+			int is_prev_wide = 1;
 			for (int i = 0; i < (int)tag_images.size(); ++i)
 			{
 				int is_wide = texture_wide[tag_images[i]];
+
 				if (is_wide || is_prev_wide || tag_double_pages.back().size() == 2)
 					tag_double_pages.emplace_back();
 
 				tag_double_pages.back().push_back(i);
 				is_prev_wide = is_wide;
+			}
+
+			//if there is a fake alone page not in front of a true wide page
+			//it means that some images where added before, so the fake wide paging must
+			//be updated accordingly
+			for (int i = 1; i < (int)tag_images.size(); ++i)
+			{
+				if (texture_wide[tag_images[i - 1]] != 1 && texture_wide[tag_images[i]] == 2)
+				{
+					texture_wide[tag_images[i]] = 0;
+					update_double_pages(tag);
+					break;
+				}
 			}
 
 			if (tag == curr_tag())
