@@ -12,7 +12,6 @@ int main(int argc, char* argv[])
 	Magick::InitializeMagick(*argv);
 	std::string config_path;
 	std::string save_file;
-	float wide_fac = 1.f;
 
 	for (int i = 1; i < argc; i++)
 	{
@@ -21,11 +20,9 @@ int main(int argc, char* argv[])
 			config_path = argv[++i];
 		else if (arg == "--save-repage")
 			save_file = argv[++i];
-		else if (arg == "--wide-factor")
-			wide_fac = std::stof(argv[++i]);
 	}
 
-	ImageViewerApp app(config_path, save_file, wide_fac);
+	ImageViewerApp app(config_path, save_file);
 	app.run();
 	return 0;
 }
