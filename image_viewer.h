@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <ranges>
 #include <regex>
 #include <string>
 #include <string_view>
@@ -15,11 +16,11 @@ class ImageViewerApp
 {
 	private:
 		sf::RenderWindow window;
-		sf::View window_view;
 
 		std::vector<sf::Sprite> sprites;
 
 		std::vector<std::string> images;
+		std::map<std::string, sf::Vector2f> texture_sizes;
 		std::map<int, std::vector<std::vector<int>>> pages;
 
 		std::map<std::string, sf::Texture> loaded_textures;
@@ -29,6 +30,7 @@ class ImageViewerApp
 
 		bool title_changed = true;
 		bool page_changed = true;
+		bool view_changed = true;
 
 		std::string paging_save_file;
 
@@ -110,11 +112,51 @@ class ImageViewerApp
 
 		void prepare_render()
 		{
-			if (page_changed)
+			if (page_changed || view_changed)
 			{
 				sprites.clear();
 				if (!pages.empty())
-					sprites.emplace_back(load_texture(images[pages[curr_tag][curr_page_index][0]]));
+				{
+					sf::Vector2f drawn_area(0, 0);
+					for (const auto& image_index : pages[curr_tag][curr_page_index])
+					{
+						const auto& image = images[image_index];
+						auto image_size = texture_sizes[image];
+
+						drawn_area.x += image_size.x;
+						drawn_area.y = std::max(drawn_area.y, image_size.y);
+					}
+
+					float scale_x = window.getSize().x / drawn_area.x;
+					float scale_y = window.getSize().y / drawn_area.y;
+
+					sf::Vector2f center_offset(0.f, 0.f);
+
+					float scale;
+					if (scale_y < scale_x)
+					{
+						scale = scale_y;
+						center_offset.x = (window.getSize().x - drawn_area.x * scale_y) / 2.f;
+					}
+					else
+					{
+						scale = scale_x;
+						center_offset.y = (window.getSize().y - drawn_area.y * scale_x) / 2.f;
+					}
+
+					float pos_x = 0;
+					for (const auto& image_index : std::views::reverse(pages[curr_tag][curr_page_index]))
+					{
+						const auto& image = images[image_index];
+
+						sprites.emplace_back();
+						sprites.back().setTexture(load_texture(image, scale));
+						sprites.back().setPosition(pos_x, 0);
+						sprites.back().move(center_offset);
+
+						pos_x += sprites.back().getGlobalBounds().width;
+					}
+				}
 			}
 		}
 
@@ -125,6 +167,8 @@ class ImageViewerApp
 				window.draw(sprite);
 
 			page_changed = false;
+			title_changed = false;
+			view_changed = false;
 		}
 
 		void poll_events(float dt)
@@ -136,8 +180,9 @@ class ImageViewerApp
 					window.close();
 				else if (event.type == sf::Event::Resized)
 				{
-					window_view.setSize(event.size.width, event.size.height);
-					window.setView(window_view);
+					sf::View new_view(sf::FloatRect(0.f, 0.f, event.size.width, event.size.height));
+					window.setView(new_view);
+					view_changed = true;
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
@@ -230,6 +275,8 @@ class ImageViewerApp
 						auto image_it = std::find(images.begin(), images.end(), image_path);
 						if (image_it == images.end())
 						{
+							texture_sizes[image_path] = (sf::Vector2f)tex.getSize();
+
 							added_indices.push_back(images.size());
 							images.push_back(image_path);
 						}
