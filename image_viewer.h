@@ -262,6 +262,13 @@ class ImageViewerApp
 				if (args.size() > 1)
 					tag = std::stoi(args[0]);
 
+				if (pages.size() == 0)
+				{
+					curr_page_index = 0;
+					curr_tag = tag;
+					page_changed = true;
+				}
+
 				std::vector<int> added_indices;
 
 				for (int i = (args.size() > 1); i < (int)args.size(); ++i)
@@ -295,13 +302,6 @@ class ImageViewerApp
 
 				if (pages[tag].size() > 1 && inserted_index <= curr_page_index)
 					curr_page_index++;
-
-				if (pages.size() == 1)
-				{
-					curr_page_index = 0;
-					curr_tag = tag;
-					page_changed = true;
-				}
 
 				//for (auto indices : pages[tag])
 				//{
@@ -349,6 +349,62 @@ class ImageViewerApp
 				else
 					std::cerr << "tag " << tag << " not present" << std::endl;
 			}
+			else if (action == "repage")
+			{
+				auto curr_pages_it = pages.find(curr_tag);
+				if (curr_pages_it == pages.end())
+					return;
+
+				auto& curr_pages = curr_pages_it->second;
+
+				auto& curr_first_image = images[curr_pages[curr_page_index][0]];
+				auto image_size = texture_sizes[curr_first_image];
+
+				if (image_size.x < image_size.y * 0.8)
+				{
+					int change_begin = 0;
+					for (int i = curr_page_index; i >= 0; --i)
+					{
+						auto image_size = texture_sizes[images[curr_pages[i][0]]];
+						if (image_size.x > image_size.y * 0.8)
+						{
+							change_begin = i + 1;
+							break;
+						}
+					}
+
+					for (int i = change_begin; i < curr_pages.size(); ++i)
+					{
+						bool next_page_wide = false;
+						if (i + 1 != curr_pages.size())
+						{
+							auto next_image_size = texture_sizes[images[curr_pages[i + 1][0]]];
+							if (next_image_size.x > next_image_size.y * 0.8)
+								next_page_wide = true;
+						}
+
+						if (i + 1 == curr_pages.size() || next_page_wide)
+						{
+							if (curr_pages[i].size() == 3)
+							{
+								curr_pages.insert(curr_pages.begin() + i + 1,
+										std::vector(1, curr_pages[i].back()));
+								curr_pages[i].pop_back();
+							}
+							break;
+						}
+						else
+						{
+							curr_pages[i+1].insert(curr_pages[i + 1].begin(), curr_pages[i].back());
+							curr_pages[i].pop_back();
+						}
+					}
+					if (curr_pages[change_begin].empty())
+						curr_pages.erase(curr_pages.begin() + change_begin);
+
+					page_changed = true;
+				}
+			}
 			else if (action == "output_string")
 				std::cout << args[0] << std::endl;
 			else if (action == "quit")
@@ -393,11 +449,12 @@ class ImageViewerApp
 			//OUTPUT ALL PAGING TO FILE
 			std::ofstream out(paging_save_file);
 
-			std::string delim = "";
+			std::string delim;
 			for (const auto&[tag, tags_pages] : pages)
 			{
 				for (const auto& tag_pages : tags_pages)
 				{
+					delim = "";
 					for (const auto& image_index : tag_pages)
 					{
 						out << delim << images[image_index];
