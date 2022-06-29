@@ -95,7 +95,7 @@ class ImageViewerApp
 					window.setTitle("no images loaded");
 				else
 				{
-					std::string title = std::to_string(curr_tag) + " [" + std::to_string(curr_page_index + 1) + "/" + std::to_string(pages[curr_tag].size()) + "]";
+					std::string title = std::to_string(curr_tag) + " - " + images[pages[curr_tag][curr_page_index][0]] + " [" + std::to_string(curr_page_index + 1) + "/" + std::to_string(pages[curr_tag].size()) + "]";
 					window.setTitle(title);
 
 				}
@@ -262,13 +262,6 @@ class ImageViewerApp
 				if (args.size() > 1)
 					tag = std::stoi(args[0]);
 
-				if (pages.size() == 0)
-				{
-					curr_page_index = 0;
-					curr_tag = tag;
-					page_changed = true;
-				}
-
 				std::vector<int> added_indices;
 
 				for (int i = (args.size() > 1); i < (int)args.size(); ++i)
@@ -280,15 +273,22 @@ class ImageViewerApp
 					if (sf::Texture tex; tex.loadFromFile(image_path))
 					{
 						auto image_it = std::find(images.begin(), images.end(), image_path);
+
+						int new_index;
 						if (image_it == images.end())
 						{
 							texture_sizes[image_path] = (sf::Vector2f)tex.getSize();
 
-							added_indices.push_back(images.size());
+							new_index = images.size();
 							images.push_back(image_path);
 						}
 						else
-							added_indices.push_back(image_it - images.begin());
+							new_index = image_it - images.begin();
+
+						added_indices.insert(std::upper_bound(added_indices.begin(), added_indices.end(), new_index,  [this] (const auto& index1, const auto& index2)
+						{
+							return images[index1] < images[index2];
+						}), new_index);
 
 						title_changed = true;
 					}
@@ -300,8 +300,15 @@ class ImageViewerApp
 						}), added_indices);
 				int inserted_index = inserted_it - pages[tag].begin();
 
-				if (pages[tag].size() > 1 && inserted_index <= curr_page_index)
+				if (tag == curr_tag && pages[tag].size() > 1 && inserted_index <= curr_page_index)
 					curr_page_index++;
+
+				if (pages.size() == 1 && pages[tag].size() == 1)
+				{
+					curr_page_index = 0;
+					curr_tag = tag;
+					page_changed = true;
+				}
 
 				//for (auto indices : pages[tag])
 				//{
