@@ -1,5 +1,5 @@
-CXXFLAGS = -O2 -std=c++20 -Wall $(shell GraphicsMagick++-config --cppflags --cxxflags)
-LIBS = $(shell GraphicsMagick++-config --libs) -lsfml-graphics -lsfml-window -lsfml-system
+CXXFLAGS = -O2 -std=c++20 -Wall $(shell Magick++-config --cppflags --cxxflags)
+LIBS = $(shell Magick++-config --libs --ldflags) -lsfml-graphics -lsfml-window -lsfml-system
 
 HEADERS = image_viewer.h
 OBJS = image_viewer.o
