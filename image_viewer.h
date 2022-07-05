@@ -69,24 +69,6 @@ class ImageViewerApp
 			return tex;
 		}
 
-		int page_from_index(int tag, int image_index) const
-		{
-			auto page_it = pages.find(tag);
-			if (page_it == pages.end())
-				return -1;
-			const auto& tag_images = page_it->second;
-
-			auto it = std::find_if(tag_images.begin(), tag_images.end(), [image_index](const std::vector<int>& page)
-					{
-						return std::find(page.begin(), page.end(), image_index) != page.end();
-					});
-
-			if (it == tag_images.end())
-				return -1;
-
-			return it - tag_images.begin();
-		}
-
 		void update_status()
 		{
 			if (title_changed || page_changed)
@@ -293,21 +275,24 @@ class ImageViewerApp
 						title_changed = true;
 					}
 				}
-				auto inserted_it = pages[tag].insert(std::upper_bound(pages[tag].begin(), pages[tag].end(), added_indices, [this]
-						(const auto& page1, const auto& page2)
-						{
-							return images[page1[0]] < images[page2[0]];
-						}), added_indices);
-				int inserted_index = inserted_it - pages[tag].begin();
-
-				if (tag == curr_tag && pages[tag].size() > 1 && inserted_index <= curr_page_index)
-					curr_page_index++;
-
-				if (pages.size() == 1 && pages[tag].size() == 1)
+				if (!added_indices.empty())
 				{
-					curr_page_index = 0;
-					curr_tag = tag;
-					page_changed = true;
+					auto inserted_it = pages[tag].insert(std::upper_bound(pages[tag].begin(), pages[tag].end(), added_indices, [this]
+							(const auto& page1, const auto& page2)
+							{
+								return images[page1[0]] < images[page2[0]];
+							}), added_indices);
+					int inserted_index = inserted_it - pages[tag].begin();
+
+					if (tag == curr_tag && pages[tag].size() > 1 && inserted_index <= curr_page_index)
+						curr_page_index++;
+
+					if (pages.size() == 1 && pages[tag].size() == 1)
+					{
+						curr_page_index = 0;
+						curr_tag = tag;
+						page_changed = true;
+					}
 				}
 
 				//for (auto indices : pages[tag])
@@ -380,17 +365,17 @@ class ImageViewerApp
 						}
 					}
 
-					for (int i = change_begin; i < curr_pages.size(); ++i)
+					for (int i = change_begin; i < (int)curr_pages.size(); ++i)
 					{
 						bool next_page_wide = false;
-						if (i + 1 != curr_pages.size())
+						if (i + 1 != (int)curr_pages.size())
 						{
 							auto next_image_size = texture_sizes[images[curr_pages[i + 1][0]]];
 							if (next_image_size.x > next_image_size.y * 0.8)
 								next_page_wide = true;
 						}
 
-						if (i + 1 == curr_pages.size() || next_page_wide)
+						if (i + 1 == (int)curr_pages.size() || next_page_wide)
 						{
 							if (curr_pages[i].size() == 3)
 							{
