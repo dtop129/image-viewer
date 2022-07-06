@@ -92,11 +92,14 @@ class ImageViewerApp
 
 		void update_double_paging(int tag)
 		{
-			if (!pages.contains(tag))
+			auto tag_pages_it = pages.find(tag);
+			if (tag_pages_it == pages.end())
 				return;
 
+			auto& tag_pages = tag_pages_it->second;
+
 			std::vector<int> image_indices;
-			for (const auto& page : pages[tag])
+			for (const auto& page : tag_pages)
 				image_indices.insert(image_indices.end(), page.begin(), page.end());
 
 			std::vector<int> lone_page(image_indices.size(), 0);
@@ -111,8 +114,8 @@ class ImageViewerApp
 			}
 
 			int check_status = 0;
-			int start0, start1;
-			int streak_begin;
+			int start0 = 0, start1 = 0;
+			int streak_begin = 0;
 			for (int i = 0; i < (int)image_indices.size(); ++i)
 			{
 				if (!lone_page[i] && check_status != 1 &&
@@ -156,16 +159,16 @@ class ImageViewerApp
 				}
 			}
 
-			pages[tag].clear();
+			tag_pages.clear();
 			for (int i = 0; i < (int)image_indices.size(); ++i)
 			{
 				if (lone_page[i] || lone_page[i + 1] || i + 1 == (int)image_indices.size())
 				{
-					pages[tag].emplace_back(std::vector{image_indices[i]});
+					tag_pages.emplace_back(std::vector{image_indices[i]});
 				}
 				else
 				{
-					pages[tag].emplace_back(std::vector{image_indices[i], image_indices[i+1]});
+					tag_pages.emplace_back(std::vector{image_indices[i], image_indices[i+1]});
 					i++;
 				}
 			}
