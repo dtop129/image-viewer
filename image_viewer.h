@@ -126,6 +126,9 @@ class ImageViewerApp
 						check_status = 1;
 						start0 = start1 = 0;
 						streak_begin = i;
+
+						if (i == 0)
+							start1 = 1;
 					}
 
 					auto[is_right, is_left] = image_side[image_indices[i]];
@@ -351,7 +354,7 @@ class ImageViewerApp
 							float color_left = avg_color_left.shade();
 							float color_right = avg_color_right.shade();
 
-							image_side.emplace_back(color_left > color_right, color_right > color_left);
+							image_side.emplace_back(color_left > 0.9 || color_left < 0.1, color_right > 0.9 || color_right < 0.1);
 						}
 
 						auto inserted_it = pages[tag].insert(std::upper_bound(pages[tag].begin(), pages[tag].end(), std::vector(1, new_index), [this]
