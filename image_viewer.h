@@ -21,6 +21,7 @@ class ImageViewerApp
 
 		std::vector<std::string> images;
 		std::vector<sf::Vector2f> texture_sizes;
+		std::vector<std::pair<int, int>> image_side;
 		std::map<int, std::vector<std::vector<int>>> pages;
 
 		std::map<std::string, sf::Texture> loaded_textures;
@@ -77,7 +78,6 @@ class ImageViewerApp
 				{
 					std::string title = std::to_string(curr_tag) + " - " + images[pages[curr_tag][curr_page_index][0]] + " [" + std::to_string(curr_page_index + 1) + "/" + std::to_string(pages[curr_tag].size()) + "]";
 					window.setTitle(title);
-
 				}
 			}
 			if (!pages.empty() && page_changed)
@@ -92,44 +92,28 @@ class ImageViewerApp
 
 		void update_double_paging(int tag)
 		{
-			std::vector<int> tag_images;
+			if (!pages.contains(tag))
+				return;
 
+			std::vector<int> image_indices;
 			for (const auto& page : pages[tag])
-			{
-				tag_images.insert(tag_images.end(), page.begin(), page.end());
-			}
-			std::sort(tag_images.begin(), tag_images.end());
+				image_indices.insert(image_indices.end(), page.begin(), page.end());
 
-			std::vector<int> lone_page(tag_images.size(), 0);
+			std::vector<int> lone_page(image_indices.size(), 0);
 
-			for (int i = 0; i < tag_images.size(); ++i)
+			for (int i = 0; i < (int)image_indices.size(); ++i)
 			{
-				int index = tag_images[i];
+				int index = image_indices[i];
 				const auto& image_size = texture_sizes[index];
 
 				if (image_size.x > image_size.y * 0.8)
 					lone_page[i] = 1;
 			}
 
-			auto is_image_lr = [this, &tag_images](int index, int right)
-			{
-				Magick::Image img(images[tag_images[index]]);
-				img.monochrome();
-				if (!right)
-					img.flop();
-				img.crop(Magick::Geometry(1, 0));
-				img.resize(Magick::Geometry(1, 1));
-
-				Magick::ColorGray avg_color = img.pixelColor(0, 0);
-				float color = avg_color.shade();
-
-				return color > 0.9;
-			};
-
 			int check_status = 0;
 			int start0, start1;
 			int streak_begin;
-			for (int i = 0; i < tag_images.size(); ++i)
+			for (int i = 0; i < (int)image_indices.size(); ++i)
 			{
 				if (!lone_page[i] && check_status != 1 &&
 						(i == 0 || lone_page[i - 1]))
@@ -143,43 +127,42 @@ class ImageViewerApp
 						start0 = start1 = 0;
 						streak_begin = i;
 					}
-				}
 
-				bool is_left = is_image_lr(i, 0);
-				bool is_right = is_image_lr(i, 1);
+					auto[is_right, is_left] = image_side[image_indices[i]];
 
-				if (is_right)
-				{
-					if ((i - streak_begin) % 2 == 0)
-						start0++;
-					else
-						start1++;
-				}
-				if (is_left)
-				{
-					if ((i - streak_begin) % 2 == 0)
-						start1++;
-					else
-						start0++;
-				}
+					if (is_right)
+					{
+						if ((i - streak_begin) % 2 == 0)
+							start0++;
+						else
+							start1++;
+					}
+					if (is_left)
+					{
+						if ((i - streak_begin) % 2 == 0)
+							start1++;
+						else
+							start0++;
+					}
 
-				if (i + 1 == tag_images.size() || lone_page[i + 1])
-				{
-					lone_page[streak_begin] = start1 > start0;
-					check_status = 0;
+					if (i + 1 == (int)image_indices.size() || lone_page[i + 1])
+					{
+						lone_page[streak_begin] = start1 > start0;
+						check_status = 0;
+					}
 				}
 			}
 
 			pages[tag].clear();
-			for (int i = 0; i < tag_images.size(); ++i)
+			for (int i = 0; i < (int)image_indices.size(); ++i)
 			{
-				if (lone_page[i] || lone_page[i + 1] || i + 1 == (int)tag_images.size())
+				if (lone_page[i] || lone_page[i + 1] || i + 1 == (int)image_indices.size())
 				{
-					pages[tag].emplace_back(std::vector{i});
+					pages[tag].emplace_back(std::vector{image_indices[i]});
 				}
 				else
 				{
-					pages[tag].emplace_back(std::vector{i, i+1});
+					pages[tag].emplace_back(std::vector{image_indices[i], image_indices[i+1]});
 					i++;
 				}
 			}
@@ -341,15 +324,34 @@ class ImageViewerApp
 					if (image_path.empty())
 						continue;
 
-					if (sf::Texture tex; tex.loadFromFile(image_path))
+					Magick::Image img;
+					try
 					{
+						img.read(image_path);
+						img.monochrome();
+
 						auto image_it = std::find(images.begin(), images.end(), image_path);
 
 						int new_index = image_it - images.begin();
 						if (image_it == images.end())
 						{
 							images.push_back(image_path);
-							texture_sizes.push_back((sf::Vector2f)tex.getSize());
+							texture_sizes.push_back(sf::Vector2f(img.columns(), img.rows()));
+
+							Magick::Image img2 = img;
+							img2.flop();
+
+							img.crop(Magick::Geometry(1, 0));
+							img.resize(Magick::Geometry(1, 1));
+							img2.crop(Magick::Geometry(1, 0));
+							img2.resize(Magick::Geometry(1, 1));
+
+							Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
+							Magick::ColorGray avg_color_right = img2.pixelColor(0, 0);
+							float color_left = avg_color_left.shade();
+							float color_right = avg_color_right.shade();
+
+							image_side.emplace_back(color_left > color_right, color_right > color_left);
 						}
 
 						auto inserted_it = pages[tag].insert(std::upper_bound(pages[tag].begin(), pages[tag].end(), std::vector(1, new_index), [this]
@@ -371,9 +373,29 @@ class ImageViewerApp
 
 						title_changed = true;
 					}
+					catch(Magick::Exception &e)
+					{
+						std::cerr << "image loading error: " << e.what() << std::endl;
+					}
 				}
 
-				update_double_paging(tag);
+				if (pages.contains(tag))
+				{
+					auto prev_page = pages[curr_tag][curr_page_index];
+					int prev_image_index = prev_page[0];
+
+					update_double_paging(tag);
+
+					if (tag == curr_tag)
+					{
+						auto page_it = std::find_if(pages[curr_tag].begin(), pages[curr_tag].end(), [prev_image_index](const auto& page) { return std::find(page.begin(), page.end(), prev_image_index) != page.end(); });
+
+						curr_page_index = page_it - pages[curr_tag].begin();
+
+						if (prev_page != pages[curr_tag][curr_page_index])
+							page_changed = true;
+					}
+				}
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
@@ -505,18 +527,18 @@ class ImageViewerApp
 			float dt = 0.f;
 			while (window.isOpen())
 			{
-				//std::cout << "BOI1" << std::endl;
+				//std::cerr << "BOI1" << std::endl;
 				check_stdin();
-				//std::cout << "BOI2" << std::endl;
+				//std::cerr << "BOI2" << std::endl;
 				poll_events(dt);
-				//std::cout << "BOI3" << std::endl;
+				//std::cerr << "BOI3" << std::endl;
 				update_status();
-				//std::cout << "BOI4" << std::endl;
+				//std::cerr << "BOI4" << std::endl;
 
 				window.clear();
 				render();
 				window.display();
-				//std::cout << "BOI5" << std::endl;
+				//std::cerr << "BOI5" << std::endl;
 
 				dt = clock.restart().asSeconds();
 			}
