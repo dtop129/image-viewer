@@ -113,6 +113,12 @@ class ImageViewerApp
 					lone_page[i] = 1;
 			}
 
+			/*
+			   CHECK STATUS
+			   2 = STREAK BEGINS
+			   1 = CHECKING INSIDE STREAK
+			   0 = STREAK ENDS
+			   */
 			int check_status = 0;
 			int start0 = 0, start1 = 0;
 			int streak_begin = 0;
@@ -130,8 +136,8 @@ class ImageViewerApp
 						start0 = start1 = 0;
 						streak_begin = i;
 
-						if (i == 0)
-							start1 = 1;
+						if (i != 0)
+							start0++;
 					}
 
 					auto[is_right, is_left] = image_side[image_indices[i]];
@@ -153,6 +159,13 @@ class ImageViewerApp
 
 					if (i + 1 == (int)image_indices.size() || lone_page[i + 1])
 					{
+						if (i + 1 != (int)image_indices.size())
+						{
+							if (i - streak_begin % 2 == 0)
+								start0++;
+							else
+								start1++;
+						}
 						lone_page[streak_begin] = start1 > start0;
 						check_status = 0;
 					}
@@ -208,7 +221,7 @@ class ImageViewerApp
 					}
 
 					float pos_x = 0;
-					for (const auto& image_index : std::views::reverse(pages[curr_tag][curr_page_index]))
+					for (const auto& image_index : pages[curr_tag][curr_page_index] | std::views::reverse)
 					{
 						const auto& image = images[image_index];
 
@@ -357,7 +370,7 @@ class ImageViewerApp
 							float color_left = avg_color_left.shade();
 							float color_right = avg_color_right.shade();
 
-							image_side.emplace_back(color_left > 0.9 || color_left < 0.1, color_right > 0.9 || color_right < 0.1);
+							image_side.emplace_back(color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05);
 						}
 
 						auto inserted_it = pages[tag].insert(std::upper_bound(pages[tag].begin(), pages[tag].end(), std::vector(1, new_index), [this]
