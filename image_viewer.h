@@ -22,6 +22,8 @@ class ImageViewerApp
 		std::vector<std::string> images;
 		std::vector<sf::Vector2f> texture_sizes;
 		std::vector<std::pair<int, int>> image_side;
+
+		//MAYBE REPLACE WITH VECTOR OF PAIRS
 		std::map<int, std::vector<std::vector<int>>> pages;
 
 		std::map<std::string, sf::Texture> loaded_textures;
@@ -29,7 +31,7 @@ class ImageViewerApp
 		int curr_page_index = 0;
 		int curr_tag = 0;
 
-		bool title_changed = true;
+		bool update_title = true;
 		bool page_changed = true;
 		bool view_changed = true;
 
@@ -70,7 +72,7 @@ class ImageViewerApp
 
 		void update_status()
 		{
-			if (title_changed || page_changed)
+			if (update_title || page_changed)
 			{
 				if (pages.empty())
 					window.setTitle("no images loaded");
@@ -243,7 +245,7 @@ class ImageViewerApp
 				window.draw(sprite);
 
 			page_changed = false;
-			title_changed = false;
+			update_title = false;
 			view_changed = false;
 		}
 
@@ -311,6 +313,62 @@ class ImageViewerApp
 					}
 				}
 			}
+		}
+
+		void repage(int tag, int start_index)
+		{
+			auto tag_pages_it = pages.find(tag);
+			if (tag_pages_it == pages.end())
+				return;
+
+			auto& tag_pages = tag_pages_it->second;
+
+			auto image_size = texture_sizes[tag_pages[curr_page_index][0]];
+
+			if (image_size.x > image_size.y * 0.8)
+				return;
+
+			int change_begin = 0;
+			for (int i = curr_page_index; i >= 0; --i)
+			{
+				auto image_size = texture_sizes[tag_pages[i][0]];
+				if (image_size.x > image_size.y * 0.8)
+				{
+					change_begin = i + 1;
+					break;
+				}
+			}
+
+			for (int i = change_begin; i < (int)tag_pages.size(); ++i)
+			{
+				bool next_page_wide = false;
+				if (i + 1 != (int)tag_pages.size())
+				{
+					auto next_image_size = texture_sizes[tag_pages[i + 1][0]];
+					if (next_image_size.x > next_image_size.y * 0.8)
+						next_page_wide = true;
+				}
+
+				if (i + 1 == (int)tag_pages.size() || next_page_wide)
+				{
+					if (tag_pages[i].size() == 3)
+					{
+						tag_pages.insert(tag_pages.begin() + i + 1,
+								std::vector(1, tag_pages[i].back()));
+						tag_pages[i].pop_back();
+					}
+					break;
+				}
+				else
+				{
+					tag_pages[i+1].insert(tag_pages[i + 1].begin(), tag_pages[i].back());
+					tag_pages[i].pop_back();
+				}
+			}
+			if (tag_pages[change_begin].empty())
+				tag_pages.erase(tag_pages.begin() + change_begin);
+
+			page_changed = true;
 		}
 
 		void run_command(std::string_view cmd)
@@ -390,7 +448,7 @@ class ImageViewerApp
 							page_changed = true;
 						}
 
-						title_changed = true;
+						update_title = true;
 					}
 					catch(Magick::Exception &e)
 					{
@@ -452,60 +510,7 @@ class ImageViewerApp
 					std::cerr << "tag " << tag << " not present" << std::endl;
 			}
 			else if (action == "repage")
-			{
-				auto curr_pages_it = pages.find(curr_tag);
-				if (curr_pages_it == pages.end())
-					return;
-
-				auto& curr_pages = curr_pages_it->second;
-
-				auto image_size = texture_sizes[curr_pages[curr_page_index][0]];
-
-				if (image_size.x < image_size.y * 0.8)
-				{
-					int change_begin = 0;
-					for (int i = curr_page_index; i >= 0; --i)
-					{
-						auto image_size = texture_sizes[curr_pages[i][0]];
-						if (image_size.x > image_size.y * 0.8)
-						{
-							change_begin = i + 1;
-							break;
-						}
-					}
-
-					for (int i = change_begin; i < (int)curr_pages.size(); ++i)
-					{
-						bool next_page_wide = false;
-						if (i + 1 != (int)curr_pages.size())
-						{
-							auto next_image_size = texture_sizes[curr_pages[i + 1][0]];
-							if (next_image_size.x > next_image_size.y * 0.8)
-								next_page_wide = true;
-						}
-
-						if (i + 1 == (int)curr_pages.size() || next_page_wide)
-						{
-							if (curr_pages[i].size() == 3)
-							{
-								curr_pages.insert(curr_pages.begin() + i + 1,
-										std::vector(1, curr_pages[i].back()));
-								curr_pages[i].pop_back();
-							}
-							break;
-						}
-						else
-						{
-							curr_pages[i+1].insert(curr_pages[i + 1].begin(), curr_pages[i].back());
-							curr_pages[i].pop_back();
-						}
-					}
-					if (curr_pages[change_begin].empty())
-						curr_pages.erase(curr_pages.begin() + change_begin);
-
-					page_changed = true;
-				}
-			}
+				repage(curr_tag, curr_page_index);
 			else if (action == "output_string")
 				std::cout << args[0] << std::endl;
 			else if (action == "quit")
