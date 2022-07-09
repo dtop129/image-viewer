@@ -411,9 +411,9 @@ class ImageViewerApp
 							Magick::Image img2 = img;
 							img2.flop();
 
-							img.crop(Magick::Geometry("1x10000+0+0"));
+							img.crop(Magick::Geometry("3x10000+0+0"));
 							img.resize(Magick::Geometry("1x1!"));
-							img2.crop(Magick::Geometry("1x10000+0+0"));
+							img2.crop(Magick::Geometry("3x10000+0+0"));
 							img2.resize(Magick::Geometry("1x1!"));
 
 							Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
