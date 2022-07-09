@@ -322,7 +322,7 @@ class ImageViewerApp
 				return;
 
 			int change_begin = 0;
-			for (int i = curr_page_index; i >= 0; --i)
+			for (int i = start_index; i >= 0; --i)
 			{
 				auto image_size = texture_sizes[tag_pages[i][0]];
 				if (image_size.x > image_size.y * 0.8)
