@@ -23,6 +23,8 @@ class ImageViewerApp
 		std::vector<sf::Vector2f> texture_sizes;
 		std::vector<std::pair<int, int>> image_sides;
 
+		std::map<int, sf::Texture> loaded_textures;
+
 		//MAYBE REPLACE WITH VECTOR OF PAIRS
 		std::map<int, std::vector<std::vector<int>>> pages;
 
@@ -58,8 +60,11 @@ class ImageViewerApp
 			}
 		}
 
-		sf::Texture load_texture(int image_index, float scale = 1.f) const
+		sf::Texture& load_texture(int image_index, float scale = 1.f)
 		{
+			if (auto it = loaded_textures.find(image_index); it != loaded_textures.end())
+				return it->second;
+
 			Magick::Image image(images[image_index]);
 			image.magick("RGBA");
 			image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
@@ -68,7 +73,7 @@ class ImageViewerApp
 			sf::Image sf_image;
 			sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
 
-			sf::Texture tex;
+			sf::Texture& tex = loaded_textures[image_index];
 			tex.loadFromImage(sf_image);
 
 			return tex;
@@ -202,11 +207,11 @@ class ImageViewerApp
 			}
 		}
 
-		void render_pages()
+		std::vector<int> render_pages()
 		{
 			auto curr_pages_it = pages.find(curr_tag);
 			if (curr_pages_it == pages.end())
-				return;
+				return std::vector<int>();
 
 			const auto& curr_pages = curr_pages_it->second;
 
@@ -239,28 +244,25 @@ class ImageViewerApp
 			float pos_x = 0;
 			for (auto image_index : curr_pages[curr_page_index] | std::views::reverse)
 			{
-				sf::Texture tex = load_texture(image_index, scale);
 				sf::Sprite sprite;
 
-				sprite.setTexture(tex);
+				sprite.setTexture(load_texture(image_index, scale));
 				sprite.setPosition(pos_x, 0);
 				sprite.move(sf::Vector2f(center_offset));
 				window.draw(sprite);
 
 				pos_x += sprite.getGlobalBounds().width;
 			}
+
+			return curr_pages[curr_page_index];
 		}
 
-		void render_vertical()
+		std::vector<int> render_vertical()
 		{
+			std::vector<int> drawn_indices;
 			auto curr_pages_it = pages.find(curr_tag);
 			if (curr_pages_it == pages.end())
-				return;
-
-			static std::map<int, sf::Texture> textures;
-			sf::Sprite sprite;
-
-			std::vector<int> drawn_indices;
+				return drawn_indices;
 
 			int offset_y = -vertical_offset;
 
@@ -275,12 +277,8 @@ class ImageViewerApp
 				int center_offset_x = window.getSize().x * 0.1;
 				float scale = window.getSize().x * 0.8 / width;
 
-				if (!textures.contains(pages[page_index][0]) || window_size_changed)
-				{
-					textures[pages[page_index][0]] = load_texture(pages[page_index][0], scale);
-				}
-
-				sprite.setTexture(textures[pages[page_index][0]], true);
+				sf::Sprite sprite;
+				sprite.setTexture(load_texture(pages[page_index][0], scale));
 				sprite.setPosition(center_offset_x, offset_y);
 
 				window.draw(sprite);
@@ -296,10 +294,7 @@ class ImageViewerApp
 				}
 			}
 
-			std::erase_if(textures, [&drawn_indices](const auto& item)
-				{
-					return std::find(drawn_indices.begin(), drawn_indices.end(), item.first) == drawn_indices.end();
-				});
+			return drawn_indices;
 		}
 
 		void render()
@@ -307,11 +302,18 @@ class ImageViewerApp
 			if (!page_changed && !window_size_changed && !scroll_changed)
 				return;
 
+			std::vector<int> drawn_indices;
+
 			window.clear();
 			if (view_mode == ViewMode::Pages)
-				render_pages();
+				drawn_indices = render_pages();
 			else
-				render_vertical();
+				drawn_indices = render_vertical();
+
+			std::erase_if(loaded_textures, [&drawn_indices](const auto& item)
+				{
+					return std::find(drawn_indices.begin(), drawn_indices.end(), item.first) == drawn_indices.end();
+				});
 		}
 
 		void poll_events()
