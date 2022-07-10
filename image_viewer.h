@@ -25,6 +25,7 @@ class ImageViewerApp
 
 		std::map<int, sf::Texture> loaded_textures;
 
+
 		//MAYBE REPLACE WITH VECTOR OF PAIRS
 		std::map<int, std::vector<std::vector<int>>> pages;
 
@@ -37,7 +38,7 @@ class ImageViewerApp
 
 		bool update_title = true;
 		bool page_changed = true;
-		bool window_size_changed = true;
+		bool view_size_changed = true;
 		bool scroll_changed = true;
 
 		std::map<int, std::string> user_bindings;
@@ -299,7 +300,7 @@ class ImageViewerApp
 
 		void render()
 		{
-			if (!page_changed && !window_size_changed && !scroll_changed)
+			if (!page_changed && !view_size_changed && !scroll_changed)
 				return;
 
 			std::vector<int> drawn_indices;
@@ -327,7 +328,7 @@ class ImageViewerApp
 				{
 					sf::View new_view(sf::FloatRect(0.f, 0.f, event.size.width, event.size.height));
 					window.setView(new_view);
-					window_size_changed = true;
+					view_size_changed = true;
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
@@ -681,7 +682,8 @@ class ImageViewerApp
 
 					for (const auto&[tag, pages] : pages)
 						update_paging(tag);
-					window_size_changed = true;
+
+					view_size_changed = true;
 				}
 			}
 			else if (action == "output_string")
@@ -739,7 +741,7 @@ class ImageViewerApp
 
 				page_changed = false;
 				update_title = false;
-				window_size_changed = false;
+				view_size_changed = false;
 				scroll_changed = false;
 
 				dt = clock.restart().asSeconds();
