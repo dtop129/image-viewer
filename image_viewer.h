@@ -25,7 +25,6 @@ class ImageViewerApp
 
 		std::map<int, sf::Texture> loaded_textures;
 
-
 		//MAYBE REPLACE WITH VECTOR OF PAIRS
 		std::map<int, std::vector<std::vector<int>>> pages;
 
@@ -227,20 +226,11 @@ class ImageViewerApp
 
 			float scale_x = window.getSize().x / drawn_area.x;
 			float scale_y = window.getSize().y / drawn_area.y;
+			float scale = std::min(scale_x, scale_y);
 
 			sf::Vector2i center_offset(0, 0);
-
-			float scale;
-			if (scale_y < scale_x)
-			{
-				scale = scale_y;
-				center_offset.x = (window.getSize().x - drawn_area.x * scale_y) / 2.f;
-			}
-			else
-			{
-				scale = scale_x;
-				center_offset.y = (window.getSize().y - drawn_area.y * scale_x) / 2.f;
-			}
+			center_offset.x = (window.getSize().x - drawn_area.x * scale) / 2.f;
+			center_offset.y = (window.getSize().y - drawn_area.y * scale) / 2.f;
 
 			float pos_x = 0;
 			for (auto image_index : curr_pages[curr_page_index] | std::views::reverse)
@@ -304,6 +294,9 @@ class ImageViewerApp
 				return;
 
 			std::vector<int> drawn_indices;
+
+			if (view_size_changed)
+				loaded_textures.clear();
 
 			window.clear();
 			if (view_mode == ViewMode::Pages)
