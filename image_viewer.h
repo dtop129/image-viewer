@@ -12,6 +12,21 @@
 #include <SFML/Graphics.hpp>
 #include <Magick++.h>
 
+sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
+{
+	Magick::Image image(image_path);
+	image.magick("RGBA");
+	image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
+	Magick::Blob blob;
+	image.write(&blob);
+	sf::Image sf_image;
+	sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
+
+	sf::Texture tex;
+	tex.loadFromImage(sf_image);
+	return tex;
+}
+
 class ImageViewerApp
 {
 	private:
@@ -21,17 +36,18 @@ class ImageViewerApp
 		std::vector<sf::Vector2f> texture_sizes;
 		std::vector<std::pair<int, int>> image_sides;
 
-		std::map<int, sf::Texture> loaded_textures;
+		std::map<std::pair<int, float>, sf::Texture> loaded_textures;
+		std::vector<std::pair<int, float>> used_textures;
 
 		//MAYBE REPLACE WITH VECTOR OF PAIRS
 		std::map<int, std::vector<std::vector<int>>> pages;
+		std::map<int, std::vector<int>> repage_indices;
 
 		int curr_page_index = 0;
 		int curr_tag = 0;
 
 		bool update_title = true;
 		bool page_changed = true;
-		bool view_changed = true;
 
 		std::map<int, std::string> user_bindings;
 
@@ -53,23 +69,27 @@ class ImageViewerApp
 			}
 		}
 
-		sf::Texture& load_texture(int image_index, float scale = 1.f)
+		void clean_unused_textures()
 		{
-			if (auto it = loaded_textures.find(image_index); it != loaded_textures.end())
+			std::erase_if(loaded_textures, [this](const auto& item)
+				{
+					return std::find(used_textures.begin(), used_textures.end(), item.first)
+						== used_textures.end();
+				});
+
+			used_textures.clear();
+		}
+
+		sf::Texture& get_texture(int image_index, float scale)
+		{
+			used_textures.emplace_back(image_index, scale);
+
+			if (auto it = loaded_textures.find({image_index, scale}); it != loaded_textures.end())
 				return it->second;
 
-			Magick::Image image(images[image_index]);
-			image.magick("RGBA");
-			image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
-			Magick::Blob blob;
-			image.write(&blob);
-			sf::Image sf_image;
-			sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
+			auto[it, inserted] = loaded_textures.emplace(std::pair{image_index, scale}, load_texture(images[image_index], scale));
 
-			sf::Texture& tex = loaded_textures[image_index];
-			tex.loadFromImage(sf_image);
-
-			return tex;
+			return it->second;
 		}
 
 		void update_status()
@@ -101,6 +121,7 @@ class ImageViewerApp
 				return;
 
 			auto& tag_pages = tag_pages_it->second;
+			auto& tag_repage_indices = repage_indices[tag];
 
 			std::vector<int> image_indices;
 			for (const auto& page : tag_pages)
@@ -170,7 +191,17 @@ class ImageViewerApp
 							else
 								start1++;
 						}
+
+						int repage_count = std::count_if(tag_repage_indices.begin(), tag_repage_indices.end(),
+								[streak_begin, streak_end = i](int image_index)
+								{
+									return streak_begin <= image_index
+										&& image_index <= streak_end;
+								});
+
 						lone_page[streak_begin] = start1 > start0;
+						if (repage_count % 2 == 1)
+							lone_page[streak_begin] = 1 - lone_page[streak_begin];
 						check_status = 0;
 					}
 				}
@@ -209,16 +240,10 @@ class ImageViewerApp
 			}
 		}
 
-		std::vector<int> render_pages()
+		std::pair<float, sf::Vector2i> get_scale_centering(const std::vector<int>& page) const
 		{
-			auto curr_pages_it = pages.find(curr_tag);
-			if (curr_pages_it == pages.end())
-				return std::vector<int>();
-
-			const auto& curr_pages = curr_pages_it->second;
-
 			sf::Vector2f drawn_area(0, 0);
-			for (const auto& image_index : curr_pages[curr_page_index])
+			for (const auto& image_index : page)
 			{
 				auto image_size = texture_sizes[image_index];
 
@@ -234,39 +259,36 @@ class ImageViewerApp
 			center_offset.x = (window.getSize().x - drawn_area.x * scale) / 2.f;
 			center_offset.y = (window.getSize().y - drawn_area.y * scale) / 2.f;
 
+			return {scale, center_offset};
+		}
+
+		void render_pages()
+		{
+			auto curr_pages_it = pages.find(curr_tag);
+			if (curr_pages_it == pages.end())
+				return;
+
+			const auto& curr_pages = curr_pages_it->second;
+			auto[scale, center_offset] = get_scale_centering(curr_pages[curr_page_index]);
+
 			float pos_x = 0;
 			for (auto image_index : curr_pages[curr_page_index] | std::views::reverse)
 			{
 				sf::Sprite sprite;
 
-				sprite.setTexture(load_texture(image_index, scale));
+				sprite.setTexture(get_texture(image_index, scale));
 				sprite.setPosition(pos_x, 0);
 				sprite.move(sf::Vector2f(center_offset));
 				window.draw(sprite);
 
 				pos_x += sprite.getGlobalBounds().width;
 			}
-
-			return curr_pages[curr_page_index];
 		}
 
 		void render()
 		{
-			if (!page_changed && !view_changed)
-				return;
-
-			std::vector<int> drawn_indices;
-
-			if (view_changed)
-				loaded_textures.clear();
-
-			window.clear();
-			drawn_indices = render_pages();
-
-			std::erase_if(loaded_textures, [&drawn_indices](const auto& item)
-				{
-					return std::find(drawn_indices.begin(), drawn_indices.end(), item.first) == drawn_indices.end();
-				});
+			render_pages();
+			clean_unused_textures();
 		}
 
 		void poll_events()
@@ -280,7 +302,6 @@ class ImageViewerApp
 				{
 					sf::View new_view(sf::FloatRect(0.f, 0.f, event.size.width, event.size.height));
 					window.setView(new_view);
-					view_changed = true;
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
@@ -335,62 +356,6 @@ class ImageViewerApp
 			}
 		}
 
-		void repage(int tag, int start_index)
-		{
-			auto tag_pages_it = pages.find(tag);
-			if (tag_pages_it == pages.end())
-				return;
-
-			auto& tag_pages = tag_pages_it->second;
-
-			auto image_size = texture_sizes[tag_pages[curr_page_index][0]];
-
-			if (image_size.x > image_size.y * 0.8)
-				return;
-
-			int change_begin = 0;
-			for (int i = start_index; i >= 0; --i)
-			{
-				auto image_size = texture_sizes[tag_pages[i][0]];
-				if (image_size.x > image_size.y * 0.8)
-				{
-					change_begin = i + 1;
-					break;
-				}
-			}
-
-			for (int i = change_begin; i < (int)tag_pages.size(); ++i)
-			{
-				bool next_page_wide = false;
-				if (i + 1 != (int)tag_pages.size())
-				{
-					auto next_image_size = texture_sizes[tag_pages[i + 1][0]];
-					if (next_image_size.x > next_image_size.y * 0.8)
-						next_page_wide = true;
-				}
-
-				if (i + 1 == (int)tag_pages.size() || next_page_wide)
-				{
-					if (tag_pages[i].size() == 3)
-					{
-						tag_pages.insert(tag_pages.begin() + i + 1,
-								std::vector(1, tag_pages[i].back()));
-						tag_pages[i].pop_back();
-					}
-					break;
-				}
-				else
-				{
-					tag_pages[i+1].insert(tag_pages[i + 1].begin(), tag_pages[i].back());
-					tag_pages[i].pop_back();
-				}
-			}
-			if (tag_pages[change_begin].empty())
-				tag_pages.erase(tag_pages.begin() + change_begin);
-
-			page_changed = true;
-		}
-
 		void run_command(std::string_view cmd)
 		{
 			std::string_view action(cmd.begin(), cmd.begin() + cmd.find('('));
@@ -439,9 +404,9 @@ class ImageViewerApp
 							Magick::Image img2 = img;
 							img2.flop();
 
-							img.crop(Magick::Geometry("3x10000+0+0"));
+							img.crop(Magick::Geometry(3, img.rows()));
 							img.resize(Magick::Geometry("1x1!"));
-							img2.crop(Magick::Geometry("3x10000+0+0"));
+							img2.crop(Magick::Geometry(3, img2.rows()));
 							img2.resize(Magick::Geometry("1x1!"));
 
 							Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
@@ -517,7 +482,13 @@ class ImageViewerApp
 					std::cerr << "tag " << tag << " not present" << std::endl;
 			}
 			else if (action == "repage")
-				repage(curr_tag, curr_page_index);
+			{
+				if (!pages.empty())
+				{
+					repage_indices[curr_tag].push_back(pages[curr_tag][curr_page_index][0]);
+					update_paging(curr_tag);
+				}
+			}
 			else if (action == "output_string")
 				std::cout << args[0] << std::endl;
 			else if (action == "quit")
@@ -544,7 +515,7 @@ class ImageViewerApp
 		{
 			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
-			window.setFramerateLimit(60);
+			window.setFramerateLimit(30);
 
 			if (!config_path.empty())
 				load_config(config_path);
@@ -554,6 +525,8 @@ class ImageViewerApp
 
 		void run()
 		{
+			//float dt;
+			//sf::Clock boi;
 			while (window.isOpen())
 			{
 				//std::cerr << "BOI1" << std::endl;
@@ -564,13 +537,16 @@ class ImageViewerApp
 				update_status();
 				//std::cerr << "BOI4" << std::endl;
 
+				window.clear();
 				render();
 				window.display();
 				//std::cerr << "BOI5" << std::endl;
 
 				page_changed = false;
 				update_title = false;
-				view_changed = false;
+
+				//dt = boi.restart().asSeconds();
+				//std::cout << 1 / dt << std::endl;
 			}
 		}
 };
