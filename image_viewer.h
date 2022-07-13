@@ -31,7 +31,7 @@ class ImageViewerApp
 
 		bool update_title = true;
 		bool page_changed = true;
-		bool view_size_changed = true;
+		bool view_changed = true;
 
 		std::map<int, std::string> user_bindings;
 
@@ -176,6 +176,7 @@ class ImageViewerApp
 				}
 			}
 
+			auto old_pages = tag_pages;
 			tag_pages.clear();
 			for (int i = 0; i < (int)image_indices.size(); ++i)
 			{
@@ -187,6 +188,23 @@ class ImageViewerApp
 				{
 					tag_pages.emplace_back(std::vector{image_indices[i], image_indices[i+1]});
 					i++;
+				}
+			}
+
+			if (tag == curr_tag)
+			{
+				auto new_page_it = std::find_if(tag_pages.begin(), tag_pages.end(),
+						[find_index = old_pages[curr_page_index][0]](const auto& page)
+						{ return std::find(page.begin(), page.end(), find_index) != page.end(); });
+
+				if (new_page_it == tag_pages.end())
+					curr_page_index = 0;
+				else
+				{
+					if (old_pages[curr_page_index] != *new_page_it)
+						page_changed = true;
+
+					curr_page_index = std::distance(tag_pages.begin(), new_page_it);
 				}
 			}
 		}
@@ -234,12 +252,12 @@ class ImageViewerApp
 
 		void render()
 		{
-			if (!page_changed && !view_size_changed)
+			if (!page_changed && !view_changed)
 				return;
 
 			std::vector<int> drawn_indices;
 
-			if (view_size_changed)
+			if (view_changed)
 				loaded_textures.clear();
 
 			window.clear();
@@ -262,7 +280,7 @@ class ImageViewerApp
 				{
 					sf::View new_view(sf::FloatRect(0.f, 0.f, event.size.width, event.size.height));
 					window.setView(new_view);
-					view_size_changed = true;
+					view_changed = true;
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
@@ -397,6 +415,7 @@ class ImageViewerApp
 				if (args.size() > 1)
 					tag = std::stoi(args[0]);
 
+				int added_count = 0;
 				for (int i = (args.size() > 1); i < (int)args.size(); ++i)
 				{
 					auto image_path = std::regex_replace(args[i], std::regex("^ +| +$"), "$1");
@@ -451,6 +470,7 @@ class ImageViewerApp
 						}
 
 						update_title = true;
+						added_count++;
 					}
 					catch(Magick::Exception& e)
 					{
@@ -458,23 +478,8 @@ class ImageViewerApp
 					}
 				}
 
-				if (pages.contains(tag))
-				{
-					auto prev_page = pages[curr_tag][curr_page_index];
-					int prev_image_index = prev_page[0];
-
+				if (added_count > 0)
 					update_paging(tag);
-
-					if (tag == curr_tag)
-					{
-						auto page_it = std::find_if(pages[curr_tag].begin(), pages[curr_tag].end(), [prev_image_index](const auto& page) { return std::find(page.begin(), page.end(), prev_image_index) != page.end(); });
-
-						curr_page_index = page_it - pages[curr_tag].begin();
-
-						if (prev_page != pages[curr_tag][curr_page_index])
-							page_changed = true;
-					}
-				}
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
@@ -565,7 +570,7 @@ class ImageViewerApp
 
 				page_changed = false;
 				update_title = false;
-				view_size_changed = false;
+				view_changed = false;
 			}
 		}
 };
