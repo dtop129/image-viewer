@@ -128,12 +128,9 @@ class ImageViewerApp
 				image_indices.insert(image_indices.end(), page.begin(), page.end());
 
 			std::vector<int> lone_page(image_indices.size(), 0);
-
 			for (int i = 0; i < (int)image_indices.size(); ++i)
 			{
-				int index = image_indices[i];
-				const auto& image_size = texture_sizes[index];
-
+				const auto& image_size = texture_sizes[image_indices[i]];
 				if (image_size.x > image_size.y * 0.8)
 					lone_page[i] = 1;
 			}
@@ -147,6 +144,7 @@ class ImageViewerApp
 			int check_status = 0;
 			int start0 = 0, start1 = 0;
 			int streak_begin = 0;
+			bool change_paging = false;
 			for (int i = 0; i < (int)image_indices.size(); ++i)
 			{
 				if (!lone_page[i] && check_status != 1 &&
@@ -160,10 +158,14 @@ class ImageViewerApp
 						check_status = 1;
 						start0 = start1 = 0;
 						streak_begin = i;
+						change_paging = false;
 
 						if (i != 0)
 							start0++;
 					}
+
+					if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), image_indices[i]) != tag_repage_indices.end())
+						change_paging = !change_paging;
 
 					auto[is_right, is_left] = image_sides[image_indices[i]];
 
@@ -192,16 +194,10 @@ class ImageViewerApp
 								start1++;
 						}
 
-						int repage_count = std::count_if(tag_repage_indices.begin(), tag_repage_indices.end(),
-								[streak_begin, streak_end = i](int image_index)
-								{
-									return streak_begin <= image_index
-										&& image_index <= streak_end;
-								});
-
 						lone_page[streak_begin] = start1 > start0;
-						if (repage_count % 2 == 1)
+						if (change_paging)
 							lone_page[streak_begin] = 1 - lone_page[streak_begin];
+
 						check_status = 0;
 					}
 				}
