@@ -498,6 +498,53 @@ class ImageViewerApp
 			return {tag_pages_it->first, page_index, 0};
 		}
 
+		void vertical_scroll(float offset)
+		{
+			int old_tag = curr_tag;
+			int old_page_index = curr_page_index;
+
+			auto curr_page = pages[curr_tag][curr_page_index];
+			auto[scale, center_offset] = get_scale_centering(curr_page);
+
+			vertical_offset += offset;
+			float curr_tex_height = texture_sizes[curr_page[0]].get().y;
+
+			bool hit_border;
+			while ((vertical_offset >= curr_tex_height * scale || vertical_offset < 0) && !hit_border)
+			{
+				if (vertical_offset >= curr_tex_height * scale)
+				{
+					vertical_offset -= curr_tex_height * scale;
+
+					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, 1);
+					if (hit_border)
+					{
+						vertical_offset = curr_tex_height * scale;
+						break;
+					}
+				}
+				else if (vertical_offset < 0)
+				{
+					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, -1);
+					if (hit_border){
+						vertical_offset = 0;
+						break;
+					}
+
+					curr_tex_height = texture_sizes[pages[curr_tag][curr_page_index][0]].get().y;
+					auto[scale, center_offset] = get_scale_centering(pages[curr_tag][curr_page_index]);
+					vertical_offset += curr_tex_height * scale;
+				}
+
+				curr_page = pages[curr_tag][curr_page_index];
+				std::tie(scale, center_offset) = get_scale_centering(curr_page);
+				curr_tex_height = texture_sizes[curr_page[0]].get().y;
+			}
+
+			if (old_tag != curr_tag || old_page_index != curr_page_index)
+				page_changed = true;
+		}
+
 		void poll_events()
 		{
 			sf::Event event;
@@ -518,18 +565,23 @@ class ImageViewerApp
 						if (event.key.code == sf::Keyboard::BackSpace)
 							offset = -1;
 
-						auto[prev_tag, prev_page_index] = std::tie(curr_tag, curr_page_index);
-						auto[new_tag, new_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
-
-						if (prev_tag == new_tag && prev_page_index == new_page_index)
-							std::cout << "last_in_dir=" << offset << std::endl;
-						else
+						if (mode == ViewMode::Manga)
 						{
-							vertical_offset = 0.f;
-							curr_tag = new_tag;
-							curr_page_index = new_page_index;
-							page_changed = true;
+							auto[prev_tag, prev_page_index] = std::tie(curr_tag, curr_page_index);
+							auto[new_tag, new_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
+
+							if (prev_tag == new_tag && prev_page_index == new_page_index)
+								std::cout << "last_in_dir=" << offset << std::endl;
+							else
+							{
+								vertical_offset = 0.f;
+								curr_tag = new_tag;
+								curr_page_index = new_page_index;
+								page_changed = true;
+							}
 						}
+						else
+							vertical_scroll(window.getSize().y * 0.5 * offset);
 					}
 					else
 					{
@@ -548,44 +600,11 @@ class ImageViewerApp
 
 			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
 			{
-				const auto& curr_page = pages[curr_tag][curr_page_index];
-
-
-				int dir = 1;
+				float offset = 1000 * dt;
 				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
-					dir = -1;
+					offset = -1 * offset;
 
-				vertical_offset += 1000 * dt * dir;
-				auto[scale, center_offset] = get_scale_centering(curr_page);
-
-				float curr_tex_height = texture_sizes[curr_page[0]].get().y;
-
-				if (vertical_offset >= curr_tex_height * scale)
-				{
-					vertical_offset -= curr_tex_height * scale;
-
-					bool hit_border;
-					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, 1);
-					if (hit_border)
-						vertical_offset = curr_tex_height * scale;
-					else
-						page_changed = true;
-				}
-				else if (vertical_offset < 0)
-				{
-					bool hit_border;
-					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, -1);
-
-					float curr_tex_height = texture_sizes[pages[curr_tag][curr_page_index][0]].get().y;
-
-					auto[scale, center_offset] = get_scale_centering(pages[curr_tag][curr_page_index]);
-					vertical_offset += curr_tex_height * scale;
-
-					if (hit_border)
-						vertical_offset = 0;
-					else
-						page_changed = true;
-				}
+				vertical_scroll(offset);
 			}
 		}
 
