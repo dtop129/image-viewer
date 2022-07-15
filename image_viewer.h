@@ -49,17 +49,24 @@ class PreloadResource
 
 sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 {
-	Magick::Image image(image_path);
-	image.magick("RGBA");
-	image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
-	Magick::Blob blob;
-	image.write(&blob);
-	sf::Image sf_image;
-	sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
+	try
+	{
+		Magick::Image image(image_path);
+		image.magick("RGBA");
+		image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
+		Magick::Blob blob;
+		image.write(&blob);
+		sf::Image sf_image;
+		sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
 
-	sf::Texture tex;
-	tex.loadFromImage(sf_image);
-	return tex;
+		sf::Texture tex;
+		tex.loadFromImage(sf_image);
+		return tex;
+	}
+	catch (std::exception& e)
+	{
+		return sf::Texture();
+	}
 }
 
 class ImageViewerApp
@@ -68,8 +75,6 @@ class ImageViewerApp
 		sf::RenderWindow window;
 
 		std::vector<std::string> images;
-		std::vector<sf::Vector2f> texture_sizes;
-		std::vector<std::pair<int, int>> image_sides;
 
 		std::map<std::pair<int, float>, PreloadResource<sf::Texture>> loaded_textures;
 
@@ -123,6 +128,70 @@ class ImageViewerApp
 			return it->second.get();
 		}
 
+		sf::Vector2f get_texture_size(int image_index) const
+		{
+			static std::map<int, sf::Vector2f> texture_sizes;
+			auto it = texture_sizes.find(image_index);
+			if (it != texture_sizes.end())
+				return it->second;
+			else
+			{
+				try
+				{
+					Magick::Image img;
+					img.ping(images[image_index]);
+					texture_sizes[image_index] = sf::Vector2f(img.columns(), img.rows());
+					return sf::Vector2f(img.columns(), img.rows());
+				}
+				catch(std::exception& e)
+				{
+					std::cerr << e.what() << std::endl;
+					texture_sizes[image_index] = sf::Vector2f(0.f, 0.f);
+					return sf::Vector2f(0.f, 0.f);
+				}
+			}
+		}
+
+		std::pair<int, int> get_texture_pageside(int image_index) const
+		{
+			static std::map<int, std::pair<int, int>> pages_side;
+			auto it = pages_side.find(image_index);
+			if (it != pages_side.end())
+				return it->second;
+			else
+			{
+				try
+				{
+					Magick::Image img;
+					img.read(images[image_index]);
+
+					Magick::Image img2 = img;
+					img2.flop();
+
+					img.crop(Magick::Geometry(3, img.rows()));
+					img.resize(Magick::Geometry("1x1!"));
+					img2.crop(Magick::Geometry(3, img2.rows()));
+					img2.resize(Magick::Geometry("1x1!"));
+
+					Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
+					Magick::ColorGray avg_color_right = img2.pixelColor(0, 0);
+					float color_left = avg_color_left.shade();
+					float color_right = avg_color_right.shade();
+
+					std::pair<int, int> page_side = {color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05};
+
+					pages_side[image_index] = page_side;
+					return page_side;
+				}
+				catch(std::exception& e)
+				{
+					std::cerr << e.what() << std::endl;
+					pages_side[image_index] = {0, 0};
+					return {0, 0};
+				}
+			}
+		}
+
 		void update_status()
 		{
 			if (update_title || page_changed)
@@ -158,7 +227,7 @@ class ImageViewerApp
 			std::vector<int> lone_page(tag_indices.size(), 0);
 			for (int i = 0; i < (int)tag_indices.size(); ++i)
 			{
-				const auto& image_size = texture_sizes[tag_indices[i]];
+				const auto& image_size = get_texture_size(tag_indices[i]);
 				if (image_size.x > image_size.y * 0.8)
 					lone_page[i] = 1;
 			}
@@ -195,7 +264,7 @@ class ImageViewerApp
 					if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
 						change_paging = !change_paging;
 
-					auto[is_right, is_left] = image_sides[tag_indices[i]];
+					auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
 
 					if (is_right)
 					{
@@ -258,7 +327,7 @@ class ImageViewerApp
 			sf::Vector2f drawn_area(0, 0);
 			for (const auto& image_index : page)
 			{
-				auto image_size = texture_sizes[image_index];
+				auto image_size = get_texture_size(image_index);
 
 				drawn_area.x += image_size.x;
 				drawn_area.y = std::max(drawn_area.y, image_size.y);
@@ -454,57 +523,30 @@ class ImageViewerApp
 					if (image_path.empty())
 						continue;
 
-					Magick::Image img;
-					try
+					auto image_it = std::find(images.begin(), images.end(), image_path);
+					int new_index = std::distance(images.begin(), image_it);
+					if (image_it == images.end())
+						images.push_back(image_path);
+
+					tag_indices.insert(std::upper_bound(tag_indices.begin(), tag_indices.end(), new_index,
+								[this] (int index1, int index2)
+							{
+								return images[index1] < images[index2];
+							}), new_index);
+
+					if (images.size() == 1)
 					{
-						img.read(image_path);
-						img.monochrome();
-
-						auto image_it = std::find(images.begin(), images.end(), image_path);
-						int new_index = std::distance(images.begin(), image_it);
-						if (image_it == images.end())
-						{
-							images.push_back(image_path);
-							texture_sizes.push_back(sf::Vector2f(img.columns(), img.rows()));
-
-							Magick::Image img2 = img;
-							img2.flop();
-
-							img.crop(Magick::Geometry(3, img.rows()));
-							img.resize(Magick::Geometry("1x1!"));
-							img2.crop(Magick::Geometry(3, img2.rows()));
-							img2.resize(Magick::Geometry("1x1!"));
-
-							Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
-							Magick::ColorGray avg_color_right = img2.pixelColor(0, 0);
-							float color_left = avg_color_left.shade();
-							float color_right = avg_color_right.shade();
-
-							image_sides.emplace_back(color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05);
-						}
-                        tag_indices.insert(std::upper_bound(tag_indices.begin(), tag_indices.end(), new_index,
-									[this] (int index1, int index2)
-                                {
-                                    return images[index1] < images[index2];
-                                }), new_index);
-
-						if (images.size() == 1)
-						{
-							curr_page_index = 0;
-							curr_tag = tag;
-							restore_index = 0;
-						}
-
-						update_title = true;
-						added_count++;
+						curr_page_index = 0;
+						curr_tag = tag;
+						restore_index = 0;
 					}
-					catch(Magick::Exception& e)
-					{
-						std::cerr << "image loading error: " << e.what() << std::endl;
-					}
-					if (added_count > 0)
-						update_paging(tag, restore_index);
+
+					update_title = true;
+					added_count++;
 				}
+
+				if (added_count > 0)
+					update_paging(tag, restore_index);
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
