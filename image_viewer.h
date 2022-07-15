@@ -535,6 +535,7 @@ class ImageViewerApp
 							page_changed = true;
 						}
 
+						tags_indices.erase(tag);
 						pages.erase(tag);
 					}
 				}
