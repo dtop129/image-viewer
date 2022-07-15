@@ -300,10 +300,13 @@ class ImageViewerApp
 				}
 			}
 
+			int old_page_index = curr_page_index;
 			auto old_pages = tag_pages;
+
 			tag_pages.clear();
 			for (int i = 0; i < (int)tag_indices.size(); ++i)
 			{
+				std::cout << tag_indices[i] << std::endl;
 				if (i + 1 == (int)tag_indices.size() || lone_page[i] || lone_page[i + 1])
 				{
 					if (tag == curr_tag && tag_indices[i] == restore_index)
@@ -320,6 +323,9 @@ class ImageViewerApp
 					i++;
 				}
 			}
+
+			if (old_pages.empty() || old_pages[old_page_index] != tag_pages[curr_page_index])
+				page_changed = true;
 		}
 
 		std::pair<float, sf::Vector2i> get_scale_centering(const std::vector<int>& page) const
@@ -525,6 +531,7 @@ class ImageViewerApp
 
 					auto image_it = std::find(images.begin(), images.end(), image_path);
 					int new_index = std::distance(images.begin(), image_it);
+
 					if (image_it == images.end())
 						images.push_back(image_path);
 
