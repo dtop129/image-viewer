@@ -69,18 +69,28 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 	}
 }
 
+
+enum class ViewMode { Manga, Vertical };
+
 class ImageViewerApp
 {
 	private:
 		sf::RenderWindow window;
 
+		ViewMode mode = ViewMode::Manga;
 		std::vector<std::string> images;
 
+
 		std::map<std::pair<int, float>, PreloadResource<sf::Texture>> loaded_textures;
+		std::vector<PreloadResource<sf::Vector2f>> texture_sizes;
 
 		std::map<int, std::vector<int>> tags_indices;
 		std::map<int, std::vector<std::vector<int>>> pages;
-		std::map<int, std::vector<int>> repage_indices;
+
+
+		std::map<int, std::vector<int>> repage_indices; //FOR MANGA PAGING
+		float vertical_offset = 0.f; //FOR VERTICAL PAGING
+
 
 		int curr_page_index = 0;
 		int curr_tag = 0;
@@ -126,30 +136,6 @@ class ImageViewerApp
 			sf::Texture tex = load_texture(images[image_index], scale);
 			auto[it, inserted] = loaded_textures.emplace(std::pair{image_index, scale}, tex);
 			return it->second.get();
-		}
-
-		sf::Vector2f get_texture_size(int image_index) const
-		{
-			static std::map<int, sf::Vector2f> texture_sizes;
-			auto it = texture_sizes.find(image_index);
-			if (it != texture_sizes.end())
-				return it->second;
-			else
-			{
-				try
-				{
-					Magick::Image img;
-					img.ping(images[image_index]);
-					texture_sizes[image_index] = sf::Vector2f(img.columns(), img.rows());
-					return sf::Vector2f(img.columns(), img.rows());
-				}
-				catch(std::exception& e)
-				{
-					std::cerr << e.what() << std::endl;
-					texture_sizes[image_index] = sf::Vector2f(0.f, 0.f);
-					return sf::Vector2f(0.f, 0.f);
-				}
-			}
 		}
 
 		std::pair<int, int> get_texture_pageside(int image_index) const
@@ -221,136 +207,162 @@ class ImageViewerApp
 				return;
 
 			auto& tag_indices = tag_it->second;
-			auto& tag_repage_indices = repage_indices[tag];
 			auto& tag_pages = pages[tag];
-
-			std::vector<int> lone_page(tag_indices.size(), 0);
-			for (int i = 0; i < (int)tag_indices.size(); ++i)
-			{
-				const auto& image_size = get_texture_size(tag_indices[i]);
-				if (image_size.x > image_size.y * 0.8)
-					lone_page[i] = 1;
-			}
-
-			/*
-			   CHECK STATUS
-			   2 = STREAK BEGINS
-			   1 = CHECKING INSIDE STREAK
-			   0 = STREAK ENDS
-			   */
-			int check_status = 0;
-			int start0 = 0, start1 = 0;
-			int streak_begin = 0;
-			bool change_paging = false;
-			for (int i = 0; i < (int)tag_indices.size(); ++i)
-			{
-				if (!lone_page[i] && check_status != 1 &&
-						(i == 0 || lone_page[i - 1]))
-					check_status = 2;
-
-				if (check_status > 0)
-				{
-					if (check_status == 2)
-					{
-						check_status = 1;
-						start0 = start1 = 0;
-						streak_begin = i;
-						change_paging = false;
-
-						if (i != 0)
-							start0++;
-					}
-
-					if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
-						change_paging = !change_paging;
-
-					auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
-
-					if (is_right)
-					{
-						if ((i - streak_begin) % 2 == 0)
-							start0++;
-						else
-							start1++;
-					}
-					if (is_left)
-					{
-						if ((i - streak_begin) % 2 == 0)
-							start1++;
-						else
-							start0++;
-					}
-
-					if (i + 1 == (int)tag_indices.size() || lone_page[i + 1])
-					{
-						if (i + 1 != (int)tag_indices.size())
-						{
-							if (i - streak_begin % 2 == 0)
-								start0++;
-							else
-								start1++;
-						}
-
-						lone_page[streak_begin] = start1 > start0;
-						if (change_paging)
-							lone_page[streak_begin] = 1 - lone_page[streak_begin];
-
-						check_status = 0;
-					}
-				}
-			}
 
 			int old_page_index = curr_page_index;
 			auto old_pages = tag_pages;
 
-			tag_pages.clear();
-			for (int i = 0; i < (int)tag_indices.size(); ++i)
+			if (mode == ViewMode::Manga)
 			{
-				std::cout << tag_indices[i] << std::endl;
-				if (i + 1 == (int)tag_indices.size() || lone_page[i] || lone_page[i + 1])
-				{
-					if (tag == curr_tag && tag_indices[i] == restore_index)
-						curr_page_index = tag_pages.size();
+				auto& tag_repage_indices = repage_indices[tag];
 
-					tag_pages.emplace_back(std::vector{tag_indices[i]});
+				std::vector<int> lone_page(tag_indices.size(), 0);
+				for (int i = 0; i < (int)tag_indices.size(); ++i)
+				{
+					const auto& image_size = texture_sizes[tag_indices[i]].get();
+					if (image_size.x > image_size.y * 0.8)
+						lone_page[i] = 1;
 				}
-				else
-				{
-					if (tag == curr_tag && (tag_indices[i] == restore_index || tag_indices[i+1] == restore_index))
-						curr_page_index = tag_pages.size();
 
-					tag_pages.emplace_back(std::vector{tag_indices[i], tag_indices[i+1]});
-					i++;
+				/*
+				   CHECK STATUS
+				   2 = STREAK BEGINS
+				   1 = CHECKING INSIDE STREAK
+				   0 = STREAK ENDS
+				   */
+				int check_status = 0;
+				int start0 = 0, start1 = 0;
+				int streak_begin = 0;
+				bool change_paging = false;
+				for (int i = 0; i < (int)tag_indices.size(); ++i)
+				{
+					if (!lone_page[i] && check_status != 1 &&
+							(i == 0 || lone_page[i - 1]))
+						check_status = 2;
+
+					if (check_status > 0)
+					{
+						if (check_status == 2)
+						{
+							check_status = 1;
+							start0 = start1 = 0;
+							streak_begin = i;
+							change_paging = false;
+
+							if (i != 0)
+								start0++;
+						}
+
+						if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
+							change_paging = !change_paging;
+
+						auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
+
+						if (is_right)
+						{
+							if ((i - streak_begin) % 2 == 0)
+								start0++;
+							else
+								start1++;
+						}
+						if (is_left)
+						{
+							if ((i - streak_begin) % 2 == 0)
+								start1++;
+							else
+								start0++;
+						}
+
+						if (i + 1 == (int)tag_indices.size() || lone_page[i + 1])
+						{
+							if (i + 1 != (int)tag_indices.size())
+							{
+								if (i - streak_begin % 2 == 0)
+									start0++;
+								else
+									start1++;
+							}
+
+							lone_page[streak_begin] = start1 > start0;
+							if (change_paging)
+								lone_page[streak_begin] = 1 - lone_page[streak_begin];
+
+							check_status = 0;
+						}
+					}
+				}
+
+				tag_pages.clear();
+				for (int i = 0; i < (int)tag_indices.size(); ++i)
+				{
+					if (i + 1 == (int)tag_indices.size() || lone_page[i] || lone_page[i + 1])
+					{
+						if (tag == curr_tag && tag_indices[i] == restore_index)
+							curr_page_index = tag_pages.size();
+
+						tag_pages.emplace_back(std::vector{tag_indices[i]});
+					}
+					else
+					{
+						if (tag == curr_tag && (tag_indices[i] == restore_index || tag_indices[i+1] == restore_index))
+							curr_page_index = tag_pages.size();
+
+						tag_pages.emplace_back(std::vector{tag_indices[i], tag_indices[i+1]});
+						i++;
+					}
+				}
+			}
+			else
+			{
+				tag_pages.clear();
+				for (auto image_index : tag_indices)
+				{
+					if (tag == curr_tag && image_index == restore_index)
+						curr_page_index = tag_pages.size();
+					tag_pages.emplace_back(std::vector{image_index});
 				}
 			}
 
-			if (old_pages.empty() || old_pages[old_page_index] != tag_pages[curr_page_index])
+			if (tag == curr_tag &&
+					(old_pages.empty() || old_pages[old_page_index] != tag_pages[curr_page_index]))
 				page_changed = true;
 		}
 
-		std::pair<float, sf::Vector2i> get_scale_centering(const std::vector<int>& page) const
+		std::pair<float, sf::Vector2i> get_scale_centering(const std::vector<int>& page)
 		{
-			sf::Vector2f drawn_area(0, 0);
-			for (const auto& image_index : page)
-			{
-				auto image_size = get_texture_size(image_index);
-
-				drawn_area.x += image_size.x;
-				drawn_area.y = std::max(drawn_area.y, image_size.y);
-			}
-
-			float scale_x = window.getSize().x / drawn_area.x;
-			float scale_y = window.getSize().y / drawn_area.y;
-			float scale = std::min(scale_x, scale_y);
-
+			float scale;
 			sf::Vector2i center_offset(0, 0);
-			center_offset.x = (window.getSize().x - drawn_area.x * scale) / 2.f;
-			center_offset.y = (window.getSize().y - drawn_area.y * scale) / 2.f;
+			if (mode == ViewMode::Manga)
+			{
+				sf::Vector2f drawn_area(0, 0);
+				for (const auto& image_index : page)
+				{
+					auto image_size = texture_sizes[image_index].get();
+
+					drawn_area.x += image_size.x;
+					drawn_area.y = std::max(drawn_area.y, image_size.y);
+				}
+
+				float scale_x = window.getSize().x / drawn_area.x;
+				float scale_y = window.getSize().y / drawn_area.y;
+
+				scale = std::min(scale_x, scale_y);
+				center_offset.x = (window.getSize().x - drawn_area.x * scale) / 2.f;
+				center_offset.y = (window.getSize().y - drawn_area.y * scale) / 2.f;
+			}
+			else
+			{
+				int image_index = page[0];
+				int width = texture_sizes[image_index].get().x;
+
+				scale = std::min(600.f, 0.8f * window.getSize().x) / width;
+				center_offset.x = (window.getSize().x - width * scale) / 2.f;
+			}
 
 			return {scale, center_offset};
 		}
 
-		void render_page()
+		int render_manga()
 		{
 			const auto& curr_pages = pages[curr_tag];
 			auto[scale, center_offset] = get_scale_centering(curr_pages[curr_page_index]);
@@ -365,6 +377,38 @@ class ImageViewerApp
 
 				pos_x += sprite.getGlobalBounds().width;
 			}
+
+			return 1;
+		}
+
+		int render_vertical()
+		{
+			int draw_tag = curr_tag;
+			int draw_page_index = curr_page_index;
+
+			int pos_y = -vertical_offset;
+			int n_pages = 0;
+			while (pos_y < (int)window.getSize().y)
+			{
+				const auto& draw_page = pages[draw_tag][draw_page_index];
+				auto[scale, center_offset] = get_scale_centering(draw_page);
+
+				sf::Sprite sprite(get_texture(draw_page[0], scale));
+				sprite.setPosition(0, pos_y);
+				sprite.move(sf::Vector2f(center_offset));
+				window.draw(sprite);
+				n_pages++;
+
+				pos_y += sprite.getGlobalBounds().height;
+
+				bool stop = false;
+				std::tie(draw_tag, draw_page_index, stop) = advance_page(draw_tag, draw_page_index, 1);
+
+				if (stop)
+					break;
+			}
+
+			return n_pages;
 		}
 
 		void render()
@@ -372,9 +416,15 @@ class ImageViewerApp
 			if (images.empty())
 				return;
 
+			int n_drawn_pages;
+			if (mode == ViewMode::Manga)
+				n_drawn_pages = render_manga();
+			else
+				n_drawn_pages = render_vertical();
+
 			std::vector<std::pair<int, float>> used_textures;
-			int preload_depth = 1;
-			for (int offset = -preload_depth; offset <= preload_depth; ++offset)
+
+			for (int offset = -1; offset <= n_drawn_pages; ++offset)
 			{
 				auto[preload_tag, preload_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
 				if (hit_border)
@@ -389,8 +439,6 @@ class ImageViewerApp
 					used_textures.emplace_back(image_index, scale);
 				}
 			}
-
-			render_page();
 
 			std::erase_if(loaded_textures, [&used_textures](const auto& item)
 				{
@@ -477,6 +525,7 @@ class ImageViewerApp
 							std::cout << "last_in_dir=" << offset << std::endl;
 						else
 						{
+							vertical_offset = 0.f;
 							curr_tag = new_tag;
 							curr_page_index = new_page_index;
 							page_changed = true;
@@ -488,6 +537,54 @@ class ImageViewerApp
 						if (it != user_bindings.end())
 							run_command(it->second);
 					}
+				}
+			}
+		}
+
+		void handle_keyboard(float dt)
+		{
+			if (!window.hasFocus() || mode != ViewMode::Vertical || images.empty())
+				return;
+
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
+			{
+				const auto& curr_page = pages[curr_tag][curr_page_index];
+
+
+				int dir = 1;
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
+					dir = -1;
+
+				vertical_offset += 1000 * dt * dir;
+				auto[scale, center_offset] = get_scale_centering(curr_page);
+
+				float curr_tex_height = texture_sizes[curr_page[0]].get().y;
+
+				if (vertical_offset >= curr_tex_height * scale)
+				{
+					vertical_offset -= curr_tex_height * scale;
+
+					bool hit_border;
+					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, 1);
+					if (hit_border)
+						vertical_offset = curr_tex_height * scale;
+					else
+						page_changed = true;
+				}
+				else if (vertical_offset < 0)
+				{
+					bool hit_border;
+					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, -1);
+
+					float curr_tex_height = texture_sizes[pages[curr_tag][curr_page_index][0]].get().y;
+
+					auto[scale, center_offset] = get_scale_centering(pages[curr_tag][curr_page_index]);
+					vertical_offset += curr_tex_height * scale;
+
+					if (hit_border)
+						vertical_offset = 0;
+					else
+						page_changed = true;
 				}
 			}
 		}
@@ -533,7 +630,23 @@ class ImageViewerApp
 					int new_index = std::distance(images.begin(), image_it);
 
 					if (image_it == images.end())
+					{
 						images.push_back(image_path);
+						texture_sizes.emplace_back([image_path]
+							{
+								try
+								{
+									Magick::Image img;
+									img.ping(image_path);
+									return sf::Vector2f(img.columns(), img.rows());
+								}
+								catch (std::exception& e)
+								{
+									std::cerr << e.what() << std::endl;
+									return sf::Vector2f(0.f, 0.f);
+								}
+							});
+					}
 
 					tag_indices.insert(std::upper_bound(tag_indices.begin(), tag_indices.end(), new_index,
 								[this] (int index1, int index2)
@@ -608,6 +721,28 @@ class ImageViewerApp
 			}
 			else if (action == "output_string")
 				std::cout << args[0] << std::endl;
+			else if (action == "change_mode")
+			{
+				ViewMode prev_mode = mode;
+				if (args[0] == "manga")
+					mode = ViewMode::Manga;
+				else if (args[0] == "vertical")
+					mode = ViewMode::Vertical;
+				else
+					std::cerr << "Mode " << args[0] << " not recognized" << std::endl;
+
+				if (mode != prev_mode)
+				{
+					std::cout << "current_mode=" << args[0] << std::endl;
+
+					if (!images.empty())
+					{
+						int preserve_index = pages[curr_tag][curr_page_index][0];
+						for (const auto&[tag, pages] : pages)
+							update_paging(tag, preserve_index);
+					}
+				}
+			}
 			else if (action == "quit")
 				window.close();
 			else
@@ -632,33 +767,58 @@ class ImageViewerApp
 		{
 			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
-			window.setFramerateLimit(30);
+			window.setFramerateLimit(60);
 
 			if (!config_path.empty())
 				load_config(config_path);
 
 			std::cin.sync_with_stdio(false);
+
+			std::cout << "current_mode=manga" << std::endl;
 		}
 
 		void run()
 		{
+			sf::Clock clock;
+			float dt = 0.f;
 			while (window.isOpen())
 			{
 				//std::cerr << "BOI1" << std::endl;
+				//float t0 = clock.getElapsedTime().asSeconds();
 				check_stdin();
+				//float t1 = clock.getElapsedTime().asSeconds();
 				//std::cerr << "BOI2" << std::endl;
 				poll_events();
+				//std::cerr << "BOI23" << std::endl;
+				//float t12 = clock.getElapsedTime().asSeconds();
+				handle_keyboard(dt);
+				//float t2 = clock.getElapsedTime().asSeconds();
 				//std::cerr << "BOI3" << std::endl;
 				update_status();
 				//std::cerr << "BOI4" << std::endl;
+				//float t3 = clock.getElapsedTime().asSeconds();
 
 				window.clear();
 				render();
 				window.display();
 				//std::cerr << "BOI5" << std::endl;
+				//float t4 = clock.getElapsedTime().asSeconds();
+
+				//float tot = t4 - t0;
+				//if (1 / tot < 50)
+				//{
+				//	std::cout << std::endl;
+				//	std::cout << "STDIN:     " << (t1 - t0) / tot << std::endl;
+				//	std::cout << "EVENTS:    " << (t12 - t1) / tot << std::endl;
+				//	std::cout << "KEYBOARD:  " << (t2 - t12) / tot << std::endl;
+				//	std::cout << "STATUS:    " << (t3 - t2) / tot << std::endl;
+				//	std::cout << "RENDERING: " << (t4 - t3) / tot << std::endl;
+				//}
 
 				page_changed = false;
 				update_title = false;
+
+				dt = clock.restart().asSeconds();
 			}
 		}
 };
