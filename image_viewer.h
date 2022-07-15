@@ -33,6 +33,7 @@ class ImageViewerApp
 		sf::RenderWindow window;
 
 		std::vector<std::string> images;
+		std::map<int, std::vector<int>> tags_indices;
 		std::vector<sf::Vector2f> texture_sizes;
 		std::vector<std::pair<int, int>> image_sides;
 
@@ -96,7 +97,7 @@ class ImageViewerApp
 		{
 			if (update_title || page_changed)
 			{
-				if (pages.empty())
+				if (images.empty())
 					window.setTitle("no images loaded");
 				else
 				{
@@ -104,7 +105,7 @@ class ImageViewerApp
 					window.setTitle(title);
 				}
 			}
-			if (!pages.empty() && page_changed)
+			if (!images.empty() && page_changed)
 			{
 				std::cout << "current_image=";
 				for (const auto& image_index : pages[curr_tag][curr_page_index])
@@ -116,22 +117,18 @@ class ImageViewerApp
 
 		void update_paging(int tag)
 		{
-			auto tag_pages_it = pages.find(tag);
-			if (tag_pages_it == pages.end())
+			auto tag_it = tags_indices.find(tag);
+			if (tag_it == tags_indices.end())
 				return;
 
-			auto& tag_pages = tag_pages_it->second;
+			auto& tag_indices = tag_it->second;
 			auto& tag_repage_indices = repage_indices[tag];
+			auto& tag_pages = pages[tag];
 
-			std::vector<int> image_indices;
-			image_indices.reserve(tag_pages.size() * 2);
-			for (const auto& page : tag_pages)
-				image_indices.insert(image_indices.end(), page.begin(), page.end());
-
-			std::vector<int> lone_page(image_indices.size(), 0);
-			for (int i = 0; i < (int)image_indices.size(); ++i)
+			std::vector<int> lone_page(tag_indices.size(), 0);
+			for (int i = 0; i < (int)tag_indices.size(); ++i)
 			{
-				const auto& image_size = texture_sizes[image_indices[i]];
+				const auto& image_size = texture_sizes[tag_indices[i]];
 				if (image_size.x > image_size.y * 0.8)
 					lone_page[i] = 1;
 			}
@@ -146,7 +143,7 @@ class ImageViewerApp
 			int start0 = 0, start1 = 0;
 			int streak_begin = 0;
 			bool change_paging = false;
-			for (int i = 0; i < (int)image_indices.size(); ++i)
+			for (int i = 0; i < (int)tag_indices.size(); ++i)
 			{
 				if (!lone_page[i] && check_status != 1 &&
 						(i == 0 || lone_page[i - 1]))
@@ -165,10 +162,10 @@ class ImageViewerApp
 							start0++;
 					}
 
-					if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), image_indices[i]) != tag_repage_indices.end())
+					if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
 						change_paging = !change_paging;
 
-					auto[is_right, is_left] = image_sides[image_indices[i]];
+					auto[is_right, is_left] = image_sides[tag_indices[i]];
 
 					if (is_right)
 					{
@@ -185,9 +182,9 @@ class ImageViewerApp
 							start0++;
 					}
 
-					if (i + 1 == (int)image_indices.size() || lone_page[i + 1])
+					if (i + 1 == (int)tag_indices.size() || lone_page[i + 1])
 					{
-						if (i + 1 != (int)image_indices.size())
+						if (i + 1 != (int)tag_indices.size())
 						{
 							if (i - streak_begin % 2 == 0)
 								start0++;
@@ -206,33 +203,38 @@ class ImageViewerApp
 
 			auto old_pages = tag_pages;
 			tag_pages.clear();
-			for (int i = 0; i < (int)image_indices.size(); ++i)
+			for (int i = 0; i < (int)tag_indices.size(); ++i)
 			{
-				if (i + 1 == (int)image_indices.size() || lone_page[i] || lone_page[i + 1])
+				if (i + 1 == (int)tag_indices.size() || lone_page[i] || lone_page[i + 1])
 				{
-					tag_pages.emplace_back(std::vector{image_indices[i]});
+					tag_pages.emplace_back(std::vector{tag_indices[i]});
 				}
 				else
 				{
-					tag_pages.emplace_back(std::vector{image_indices[i], image_indices[i+1]});
+					tag_pages.emplace_back(std::vector{tag_indices[i], tag_indices[i+1]});
 					i++;
 				}
 			}
 
 			if (tag == curr_tag)
 			{
-				auto new_page_it = std::find_if(tag_pages.begin(), tag_pages.end(),
-						[find_index = old_pages[curr_page_index][0]](const auto& page)
-						{ return std::find(page.begin(), page.end(), find_index) != page.end(); });
-
-				if (new_page_it == tag_pages.end())
-					curr_page_index = 0;
+				if (old_pages.empty())
+					page_changed = true;
 				else
 				{
-					if (old_pages[curr_page_index] != *new_page_it)
-						page_changed = true;
+					auto new_page_it = std::find_if(tag_pages.begin(), tag_pages.end(),
+							[find_index = old_pages[curr_page_index][0]](const auto& page)
+							{ return std::find(page.begin(), page.end(), find_index) != page.end(); });
 
-					curr_page_index = std::distance(tag_pages.begin(), new_page_it);
+					if (new_page_it == tag_pages.end())
+						curr_page_index = 0;
+					else
+					{
+						if (old_pages[curr_page_index] != *new_page_it)
+							page_changed = true;
+
+						curr_page_index = std::distance(tag_pages.begin(), new_page_it);
+					}
 				}
 			}
 		}
@@ -375,6 +377,8 @@ class ImageViewerApp
 				if (args.size() > 1)
 					tag = std::stoi(args[0]);
 
+				auto& tag_indices = tags_indices[tag];
+
 				int added_count = 0;
 				for (int i = (args.size() > 1); i < (int)args.size(); ++i)
 				{
@@ -389,8 +393,7 @@ class ImageViewerApp
 						img.monochrome();
 
 						auto image_it = std::find(images.begin(), images.end(), image_path);
-
-						int new_index = image_it - images.begin();
+						int new_index = std::distance(images.begin(), image_it);
 						if (image_it == images.end())
 						{
 							images.push_back(image_path);
@@ -411,22 +414,16 @@ class ImageViewerApp
 
 							image_sides.emplace_back(color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05);
 						}
+                        tag_indices.insert(std::upper_bound(tag_indices.begin(), tag_indices.end(), new_index,
+									[this] (int index1, int index2)
+                                {
+                                    return images[index1] < images[index2];
+                                }), new_index);
 
-						auto inserted_it = pages[tag].insert(std::upper_bound(pages[tag].begin(), pages[tag].end(), std::vector(1, new_index), [this]
-								(const auto& page1, const auto& page2)
-								{
-									return images[page1[0]] < images[page2[0]];
-								}), std::vector(1, new_index));
-						int inserted_index = inserted_it - pages[tag].begin();
-
-						if (tag == curr_tag && pages[tag].size() > 1 && inserted_index <= curr_page_index)
-							curr_page_index++;
-
-						if (pages.size() == 1 && pages[tag].size() == 1)
+						if (images.size() == 1)
 						{
 							curr_page_index = 0;
 							curr_tag = tag;
-							page_changed = true;
 						}
 
 						update_title = true;
