@@ -1,6 +1,8 @@
 #pragma once
 
 #include <fstream>
+#include <functional>
+#include <future>
 #include <iostream>
 #include <map>
 #include <ranges>
@@ -11,6 +13,39 @@
 
 #include <SFML/Graphics.hpp>
 #include <Magick++.h>
+
+template<class T>
+class PreloadResource
+{
+	private:
+		T resource;
+		std::future<T> loading_resource;
+		std::function<T()> getter;
+
+		bool loaded = false;
+
+	public:
+		PreloadResource(std::function<T()> f) : getter(f)
+		{
+			loading_resource = std::async(std::launch::async, getter);
+		}
+
+		PreloadResource(const T& val) : resource(val)
+		{
+			loaded = true;
+		}
+
+		const T& get()
+		{
+			if (loaded)
+				return resource;
+
+			resource = loading_resource.get();
+			loaded = true;
+
+			return resource;
+		}
+};
 
 sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 {
@@ -33,14 +68,12 @@ class ImageViewerApp
 		sf::RenderWindow window;
 
 		std::vector<std::string> images;
-		std::map<int, std::vector<int>> tags_indices;
 		std::vector<sf::Vector2f> texture_sizes;
 		std::vector<std::pair<int, int>> image_sides;
 
-		std::map<std::pair<int, float>, sf::Texture> loaded_textures;
-		std::vector<std::pair<int, float>> used_textures;
+		std::map<std::pair<int, float>, PreloadResource<sf::Texture>> loaded_textures;
 
-		//MAYBE REPLACE WITH VECTOR OF PAIRS
+		std::map<int, std::vector<int>> tags_indices;
 		std::map<int, std::vector<std::vector<int>>> pages;
 		std::map<int, std::vector<int>> repage_indices;
 
@@ -70,27 +103,24 @@ class ImageViewerApp
 			}
 		}
 
-		void clean_unused_textures()
+		void preload_texture_async(int image_index, float scale)
 		{
-			std::erase_if(loaded_textures, [this](const auto& item)
-				{
-					return std::find(used_textures.begin(), used_textures.end(), item.first)
-						== used_textures.end();
-				});
+			if (loaded_textures.contains({image_index, scale}))
+				return;
 
-			used_textures.clear();
+			loaded_textures.emplace(std::pair{image_index, scale},
+					[image_path = images[image_index], scale]
+					{ return load_texture(image_path, scale); });
 		}
 
-		sf::Texture& get_texture(int image_index, float scale)
+		const sf::Texture& get_texture(int image_index, float scale)
 		{
-			used_textures.emplace_back(image_index, scale);
-
 			if (auto it = loaded_textures.find({image_index, scale}); it != loaded_textures.end())
-				return it->second;
+				return it->second.get();
 
-			auto[it, inserted] = loaded_textures.emplace(std::pair{image_index, scale}, load_texture(images[image_index], scale));
-
-			return it->second;
+			sf::Texture tex = load_texture(images[image_index], scale);
+			auto[it, inserted] = loaded_textures.emplace(std::pair{image_index, scale}, tex);
+			return it->second.get();
 		}
 
 		void update_status()
@@ -284,8 +314,82 @@ class ImageViewerApp
 
 		void render()
 		{
+			std::vector<std::pair<int, float>> used_textures;
+			int preload_depth = 1;
+			for (int offset = -preload_depth; offset <= preload_depth; ++offset)
+			{
+				auto[preload_tag, preload_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
+				if (hit_border)
+					continue;
+
+				const auto& preload_page = pages[preload_tag][preload_page_index];
+
+				auto[scale, centering] = get_scale_centering(preload_page);
+				for (int image_index : preload_page)
+				{
+					preload_texture_async(image_index, scale);
+					used_textures.emplace_back(image_index, scale);
+				}
+			}
+
 			render_pages();
-			clean_unused_textures();
+
+			std::erase_if(loaded_textures, [&used_textures](const auto& item)
+				{
+					return std::find(used_textures.begin(), used_textures.end(), item.first)
+						== used_textures.end();
+				});
+		}
+
+		//pair returns {new tag, new index, hit border}
+		//hit border doesn't mean that the indices didn't advance
+		std::tuple<int, int, bool> advance_page(int tag, int page_index, int offset)
+		{
+			auto tag_pages_it = pages.find(tag);
+			if (tag_pages_it == pages.end())
+				return {0, 0, 0};
+
+			while (offset != 0)
+			{
+				auto& tag_pages = tag_pages_it->second;
+
+				int new_page_index = std::clamp(page_index + offset, 0, (int)tag_pages.size() - 1);
+				int real_offset = new_page_index - page_index;
+				offset = offset - real_offset;
+
+				if (offset == 0)
+					page_index = new_page_index;
+				else
+				{
+					int page_offset = 1;
+					if (offset < 0)
+						page_offset = -1;
+
+					offset = offset - page_offset;
+
+					int tag_pages_index = std::distance(pages.begin(), tag_pages_it);
+					int new_pages_index = std::clamp(tag_pages_index + page_offset, 0, (int)pages.size() - 1);
+
+					if (new_pages_index != tag_pages_index)
+					{
+						std::advance(tag_pages_it, page_offset);
+
+						page_index = 0;
+						if (page_offset < 0)
+							page_index = tag_pages_it->second.size() - 1;
+					}
+					else
+					{
+						page_index = tag_pages_it->second.size() - 1;
+						if (page_offset < 0)
+							page_index = 0;
+
+						return {tag_pages_it->first, page_index, 1};
+					}
+				}
+			}
+
+			return {tag_pages_it->first, page_index, 0};
 		}
 
 		void poll_events()
@@ -304,44 +408,21 @@ class ImageViewerApp
 				{
 					if ((event.key.code == sf::Keyboard::Space || event.key.code == sf::Keyboard::BackSpace))
 					{
-						auto curr_pages_it = pages.find(curr_tag);
-						if (curr_pages_it == pages.end())
-							return;
-
-						int prev_tag = curr_tag;
-						int prev_page_index = curr_page_index;
-						const auto& curr_tag_pages = curr_pages_it->second;
-
 						int offset = 1;
 						if (event.key.code == sf::Keyboard::BackSpace)
 							offset = -1;
 
-						int new_page_index = std::clamp(curr_page_index + offset, 0, (int)curr_tag_pages.size() - 1);
-						int real_offset = new_page_index - curr_page_index;
+						auto[prev_tag, prev_page_index] = std::tie(curr_tag, curr_page_index);
+						auto[new_tag, new_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
 
-						if (real_offset != 0)
-							curr_page_index = new_page_index;
+						if (prev_tag == new_tag && prev_page_index == new_page_index)
+							std::cout << "last_in_dir=" << offset << std::endl;
 						else
 						{
-							int curr_pages_index = std::distance(pages.begin(), curr_pages_it);
-							int new_pages_index = std::clamp(curr_pages_index + offset, 0, (int)pages.size() - 1);
-
-							int real_offset = new_pages_index - curr_pages_index;
-							if (real_offset != 0)
-							{
-								std::advance(curr_pages_it, real_offset);
-								curr_tag = curr_pages_it->first;
-
-								curr_page_index = 0;
-								if (real_offset < 0)
-									curr_page_index = curr_pages_it->second.size() - 1;
-							}
-							else
-								std::cout << "last_in_dir=" << offset << std::endl;
-						}
-
-						if (prev_tag != curr_tag || prev_page_index != curr_page_index)
+							curr_tag = new_tag;
+							curr_page_index = new_page_index;
 							page_changed = true;
+						}
 					}
 					else
 					{
@@ -517,8 +598,6 @@ class ImageViewerApp
 
 		void run()
 		{
-			//float dt;
-			//sf::Clock boi;
 			while (window.isOpen())
 			{
 				//std::cerr << "BOI1" << std::endl;
@@ -536,9 +615,6 @@ class ImageViewerApp
 
 				page_changed = false;
 				update_title = false;
-
-				//dt = boi.restart().asSeconds();
-				//std::cout << 1 / dt << std::endl;
 			}
 		}
 };
