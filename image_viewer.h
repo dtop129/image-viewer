@@ -124,6 +124,7 @@ class ImageViewerApp
 			auto& tag_repage_indices = repage_indices[tag];
 
 			std::vector<int> image_indices;
+			image_indices.reserve(tag_pages.size() * 2);
 			for (const auto& page : tag_pages)
 				image_indices.insert(image_indices.end(), page.begin(), page.end());
 
@@ -270,9 +271,7 @@ class ImageViewerApp
 			float pos_x = 0;
 			for (auto image_index : curr_pages[curr_page_index] | std::views::reverse)
 			{
-				sf::Sprite sprite;
-
-				sprite.setTexture(get_texture(image_index, scale));
+				sf::Sprite sprite(get_texture(image_index, scale));
 				sprite.setPosition(pos_x, 0);
 				sprite.move(sf::Vector2f(center_offset));
 				window.draw(sprite);
