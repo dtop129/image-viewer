@@ -545,7 +545,14 @@ class ImageViewerApp
 			{
 				if (!pages.empty())
 				{
-					repage_indices[curr_tag].push_back(pages[curr_tag][curr_page_index][0]);
+					auto& curr_repage_indices = repage_indices[curr_tag];
+					int curr_image_index = pages[curr_tag][curr_page_index][0];
+					if (auto it = std::find(curr_repage_indices.begin(), curr_repage_indices.end(), curr_image_index); it != curr_repage_indices.end())
+					{
+						curr_repage_indices.erase(it);
+					}
+					else
+						curr_repage_indices.push_back(curr_image_index);
 					update_paging(curr_tag);
 				}
 			}
