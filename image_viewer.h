@@ -145,7 +145,7 @@ class ImageViewerApp
 			}
 		}
 
-		void update_paging(int tag)
+		void update_paging(int tag, int restore_index = -1)
 		{
 			auto tag_it = tags_indices.find(tag);
 			if (tag_it == tags_indices.end())
@@ -237,34 +237,18 @@ class ImageViewerApp
 			{
 				if (i + 1 == (int)tag_indices.size() || lone_page[i] || lone_page[i + 1])
 				{
+					if (tag == curr_tag && tag_indices[i] == restore_index)
+						curr_page_index = tag_pages.size();
+
 					tag_pages.emplace_back(std::vector{tag_indices[i]});
 				}
 				else
 				{
+					if (tag == curr_tag && (tag_indices[i] == restore_index || tag_indices[i+1] == restore_index))
+						curr_page_index = tag_pages.size();
+
 					tag_pages.emplace_back(std::vector{tag_indices[i], tag_indices[i+1]});
 					i++;
-				}
-			}
-
-			if (tag == curr_tag)
-			{
-				if (old_pages.empty())
-					page_changed = true;
-				else
-				{
-					auto new_page_it = std::find_if(tag_pages.begin(), tag_pages.end(),
-							[find_index = old_pages[curr_page_index][0]](const auto& page)
-							{ return std::find(page.begin(), page.end(), find_index) != page.end(); });
-
-					if (new_page_it == tag_pages.end())
-						curr_page_index = 0;
-					else
-					{
-						if (old_pages[curr_page_index] != *new_page_it)
-							page_changed = true;
-
-						curr_page_index = std::distance(tag_pages.begin(), new_page_it);
-					}
 				}
 			}
 		}
@@ -291,13 +275,9 @@ class ImageViewerApp
 			return {scale, center_offset};
 		}
 
-		void render_pages()
+		void render_page()
 		{
-			auto curr_pages_it = pages.find(curr_tag);
-			if (curr_pages_it == pages.end())
-				return;
-
-			const auto& curr_pages = curr_pages_it->second;
+			const auto& curr_pages = pages[curr_tag];
 			auto[scale, center_offset] = get_scale_centering(curr_pages[curr_page_index]);
 
 			float pos_x = 0;
@@ -314,6 +294,9 @@ class ImageViewerApp
 
 		void render()
 		{
+			if (images.empty())
+				return;
+
 			std::vector<std::pair<int, float>> used_textures;
 			int preload_depth = 1;
 			for (int offset = -preload_depth; offset <= preload_depth; ++offset)
@@ -332,7 +315,7 @@ class ImageViewerApp
 				}
 			}
 
-			render_pages();
+			render_page();
 
 			std::erase_if(loaded_textures, [&used_textures](const auto& item)
 				{
@@ -461,6 +444,10 @@ class ImageViewerApp
 				auto& tag_indices = tags_indices[tag];
 
 				int added_count = 0;
+				int restore_index = -1;
+				if (tag == curr_tag && !images.empty())
+					restore_index = pages[curr_tag][curr_page_index][0];
+
 				for (int i = (args.size() > 1); i < (int)args.size(); ++i)
 				{
 					auto image_path = std::regex_replace(args[i], std::regex("^ +| +$"), "$1");
@@ -505,6 +492,7 @@ class ImageViewerApp
 						{
 							curr_page_index = 0;
 							curr_tag = tag;
+							restore_index = 0;
 						}
 
 						update_title = true;
@@ -514,10 +502,9 @@ class ImageViewerApp
 					{
 						std::cerr << "image loading error: " << e.what() << std::endl;
 					}
+					if (added_count > 0)
+						update_paging(tag, restore_index);
 				}
-
-				if (added_count > 0)
-					update_paging(tag);
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
