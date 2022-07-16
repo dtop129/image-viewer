@@ -13,9 +13,18 @@
 
 #include <SFML/Graphics.hpp>
 #include <Magick++.h>
+#include "BS_thread_pool.hpp"
+
+class PreloadResourceBase
+{
+	protected:
+		static BS::thread_pool pool;
+};
+
+BS::thread_pool PreloadResourceBase::pool;
 
 template<class T>
-class PreloadResource
+class PreloadResource : public PreloadResourceBase
 {
 	private:
 		T resource;
@@ -27,7 +36,7 @@ class PreloadResource
 	public:
 		PreloadResource(std::function<T()> f) : getter(f)
 		{
-			loading_resource = std::async(std::launch::async, getter);
+			loading_resource = pool.submit(f);
 		}
 
 		PreloadResource(const T& val) : resource(val)
@@ -358,7 +367,7 @@ class ImageViewerApp
 				int image_index = page[0];
 				int width = texture_sizes[image_index].get().x;
 
-				scale = std::min(600.f, 0.8f * window.getSize().x) / width;
+				scale = std::min(700.f, 0.8f * window.getSize().x) / width;
 				center_offset.x = (window.getSize().x - width * scale) / 2.f;
 			}
 
@@ -606,7 +615,7 @@ class ImageViewerApp
 
 			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
 			{
-				float offset = 1000 * dt;
+				float offset = 800 * dt;
 				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
 					offset = -1 * offset;
 

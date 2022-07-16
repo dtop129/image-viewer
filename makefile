@@ -1,4 +1,4 @@
-CXXFLAGS = -O2 -std=c++20 -Wall $(shell GraphicsMagick++-config --cppflags --cxxflags --ldflags)
+CXXFLAGS = -O3 -std=c++20 -Wall $(shell GraphicsMagick++-config --cppflags --cxxflags --ldflags)
 LIBS = $(shell GraphicsMagick++-config --libs) -lsfml-graphics -lsfml-window -lsfml-system
 
 HEADERS = image_viewer.h
