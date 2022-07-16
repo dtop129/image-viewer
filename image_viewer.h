@@ -49,24 +49,26 @@ class PreloadResource
 
 sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 {
+	Magick::Image image;
 	try
 	{
-		Magick::Image image(image_path);
-		image.magick("RGBA");
-		image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
-		Magick::Blob blob;
-		image.write(&blob);
-		sf::Image sf_image;
-		sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
-
-		sf::Texture tex;
-		tex.loadFromImage(sf_image);
-		return tex;
+		image.read(image_path);
 	}
 	catch (std::exception& e)
 	{
 		return sf::Texture();
 	}
+
+	image.magick("RGBA");
+	image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
+	Magick::Blob blob;
+	image.write(&blob);
+	sf::Image sf_image;
+	sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
+
+	sf::Texture tex;
+	tex.loadFromImage(sf_image);
+	return tex;
 }
 
 
@@ -146,28 +148,10 @@ class ImageViewerApp
 				return it->second;
 			else
 			{
+				Magick::Image img;
 				try
 				{
-					Magick::Image img;
 					img.read(images[image_index]);
-
-					Magick::Image img2 = img;
-					img2.flop();
-
-					img.crop(Magick::Geometry(3, img.rows()));
-					img.resize(Magick::Geometry("1x1!"));
-					img2.crop(Magick::Geometry(3, img2.rows()));
-					img2.resize(Magick::Geometry("1x1!"));
-
-					Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
-					Magick::ColorGray avg_color_right = img2.pixelColor(0, 0);
-					float color_left = avg_color_left.shade();
-					float color_right = avg_color_right.shade();
-
-					std::pair<int, int> page_side = {color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05};
-
-					pages_side[image_index] = page_side;
-					return page_side;
 				}
 				catch(std::exception& e)
 				{
@@ -175,6 +159,24 @@ class ImageViewerApp
 					pages_side[image_index] = {0, 0};
 					return {0, 0};
 				}
+
+				Magick::Image img2 = img;
+				img2.flop();
+
+				img.crop(Magick::Geometry(3, img.rows()));
+				img.resize(Magick::Geometry("1x1!"));
+				img2.crop(Magick::Geometry(3, img2.rows()));
+				img2.resize(Magick::Geometry("1x1!"));
+
+				Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
+				Magick::ColorGray avg_color_right = img2.pixelColor(0, 0);
+				float color_left = avg_color_left.shade();
+				float color_right = avg_color_right.shade();
+
+				std::pair<int, int> page_side = {color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05};
+
+				pages_side[image_index] = page_side;
+				return page_side;
 			}
 		}
 
