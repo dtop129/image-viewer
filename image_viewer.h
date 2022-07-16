@@ -82,7 +82,6 @@ class ImageViewerApp
 		ViewMode mode = ViewMode::Manga;
 		std::vector<std::string> images;
 
-
 		std::map<std::pair<int, float>, PreloadResource<sf::Texture>> loaded_textures;
 		std::vector<PreloadResource<sf::Vector2f>> texture_sizes;
 		std::vector<std::pair<int, float>> used_textures;
@@ -90,15 +89,13 @@ class ImageViewerApp
 		std::map<int, std::vector<int>> tags_indices;
 		std::map<int, std::vector<std::vector<int>>> pages;
 
-
 		std::map<int, std::pair<int, int>> pages_side;  //FOR MANGA PAGING
 		std::map<int, std::vector<int>> repage_indices; //FOR MANGA PAGING
 		float vertical_offset = 0.f; //FOR VERTICAL PAGING
 
-
+		int curr_image_index = 0;
 		int curr_page_index = 0;
-		int curr_tag = 0;
-
+		int curr_tag;
 
 		bool update_title = true;
 		bool page_changed = true;
@@ -189,7 +186,10 @@ class ImageViewerApp
 					window.setTitle("no images loaded");
 				else
 				{
-					std::string title = std::to_string(curr_tag) + " - " + images[pages[curr_tag][curr_page_index][0]] + " [" + std::to_string(curr_page_index + 1) + "/" + std::to_string(pages[curr_tag].size()) + "]";
+					const auto& tag_indices = tags_indices[curr_tag];
+					int relative_index = std::find(tag_indices.begin(), tag_indices.end(), curr_image_index) - tag_indices.begin();
+
+					std::string title = std::to_string(curr_tag) + " - " + images[curr_image_index] + " [" + std::to_string(relative_index + 1) + "/" + std::to_string(tag_indices.size()) + "]";
 					window.setTitle(title);
 				}
 			}
@@ -198,12 +198,11 @@ class ImageViewerApp
 				std::cout << "current_image=";
 				for (const auto& image_index : pages[curr_tag][curr_page_index])
 					std::cout << images[image_index] << '\t';
-
 				std::cout << std::endl;
 			}
 		}
 
-		void update_paging(int tag, int restore_index = -1)
+		void update_paging(int tag)
 		{
 			auto tag_it = tags_indices.find(tag);
 			if (tag_it == tags_indices.end())
@@ -212,8 +211,9 @@ class ImageViewerApp
 			auto& tag_indices = tag_it->second;
 			auto& tag_pages = pages[tag];
 
-			int old_page_index = curr_page_index;
-			auto old_pages = tag_pages;
+			std::vector<int> old_current_page;
+			if (tag == curr_tag && !tag_pages.empty())
+				old_current_page = tag_pages[curr_page_index];
 
 			if (mode == ViewMode::Manga)
 			{
@@ -300,16 +300,10 @@ class ImageViewerApp
 				{
 					if (i + 1 == (int)tag_indices.size() || lone_page[i] || lone_page[i + 1])
 					{
-						if (tag == curr_tag && tag_indices[i] == restore_index)
-							curr_page_index = tag_pages.size();
-
 						tag_pages.emplace_back(std::vector{tag_indices[i]});
 					}
 					else
 					{
-						if (tag == curr_tag && (tag_indices[i] == restore_index || tag_indices[i+1] == restore_index))
-							curr_page_index = tag_pages.size();
-
 						tag_pages.emplace_back(std::vector{tag_indices[i], tag_indices[i+1]});
 						i++;
 					}
@@ -319,16 +313,22 @@ class ImageViewerApp
 			{
 				tag_pages.clear();
 				for (auto image_index : tag_indices)
-				{
-					if (tag == curr_tag && image_index == restore_index)
-						curr_page_index = tag_pages.size();
 					tag_pages.emplace_back(std::vector{image_index});
-				}
 			}
 
-			if (tag == curr_tag &&
-					(old_pages.empty() || old_pages[old_page_index] != tag_pages[curr_page_index]))
-				page_changed = true;
+			if (tag == curr_tag)
+			{
+				for (int i = 0; i < (int)tag_pages.size(); ++i)
+				{
+					if (std::find(tag_pages[i].begin(), tag_pages[i].end(), curr_image_index) != tag_pages[i].end())
+					{
+						curr_page_index = i;
+						break;
+					}
+				}
+				if (old_current_page != tag_pages[curr_page_index])
+					page_changed = true;
+			}
 		}
 
 		std::pair<float, sf::Vector2i> get_scale_centering(const std::vector<int>& page)
@@ -585,6 +585,9 @@ class ImageViewerApp
 						}
 						else
 							vertical_scroll(window.getSize().y * 0.5 * offset);
+
+						if (page_changed)
+							curr_image_index = pages[curr_tag][curr_page_index][0];
 					}
 					else
 					{
@@ -633,18 +636,20 @@ class ImageViewerApp
 			{
 				int tag = 0;
 				if (args.size() > 1)
+				{
 					tag = std::stoi(args[0]);
+					args.erase(args.begin());
+				}
+
+				update_title = true;
+				if (images.size() == 0)
+					curr_tag = tag;
 
 				auto& tag_indices = tags_indices[tag];
 
-				int added_count = 0;
-				int restore_index = -1;
-				if (tag == curr_tag && !images.empty())
-					restore_index = pages[curr_tag][curr_page_index][0];
-
-				for (int i = (args.size() > 1); i < (int)args.size(); ++i)
+				for (const auto& arg : args)
 				{
-					auto image_path = std::regex_replace(args[i], std::regex("^ +| +$"), "$1");
+					auto image_path = std::regex_replace(arg, std::regex("^ +| +$"), "$1");
 					if (image_path.empty())
 						continue;
 
@@ -675,20 +680,10 @@ class ImageViewerApp
 							{
 								return images[index1] < images[index2];
 							}), new_index);
-
-					if (images.size() == 1)
-					{
-						curr_page_index = 0;
-						curr_tag = tag;
-						restore_index = 0;
-					}
-
-					update_title = true;
-					added_count++;
 				}
 
-				if (added_count > 0)
-					update_paging(tag, restore_index);
+				if (!args.empty())
+					update_paging(tag);
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
@@ -699,8 +694,9 @@ class ImageViewerApp
 				{
 					if (action == "goto_tag")
 					{
-						curr_page_index = 0;
 						curr_tag = tag;
+						curr_page_index = 0;
+						curr_image_index = tag_pages_it->second[0][0];
 
 						page_changed = true;
 					}
@@ -708,13 +704,14 @@ class ImageViewerApp
 					{
 						if (tag == curr_tag)
 						{
-							curr_page_index = 0;
 							if (std::next(tag_pages_it) != pages.end())
 								std::advance(tag_pages_it, 1);
 							else if (tag_pages_it != pages.begin())
 								std::advance(tag_pages_it, -1);
 
 							curr_tag = tag_pages_it->first;
+							curr_page_index = 0;
+							curr_image_index = tag_pages_it->second[0][0];
 
 							page_changed = true;
 						}
@@ -728,16 +725,14 @@ class ImageViewerApp
 			}
 			else if (action == "repage")
 			{
-				if (!pages.empty())
+				if (!pages.empty() && mode == ViewMode::Manga)
 				{
 					auto& curr_repage_indices = repage_indices[curr_tag];
-					int curr_image_index = pages[curr_tag][curr_page_index][0];
 					if (auto it = std::find(curr_repage_indices.begin(), curr_repage_indices.end(), curr_image_index); it != curr_repage_indices.end())
-					{
 						curr_repage_indices.erase(it);
-					}
 					else
 						curr_repage_indices.push_back(curr_image_index);
+
 					update_paging(curr_tag);
 				}
 			}
@@ -757,12 +752,8 @@ class ImageViewerApp
 				{
 					std::cout << "current_mode=" << args[0] << std::endl;
 
-					if (!images.empty())
-					{
-						int preserve_index = pages[curr_tag][curr_page_index][0];
-						for (const auto&[tag, pages] : pages)
-							update_paging(tag, preserve_index);
-					}
+					for (const auto&[tag, pages] : pages)
+						update_paging(tag);
 				}
 			}
 			else if (action == "quit")
