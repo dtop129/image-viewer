@@ -85,11 +85,13 @@ class ImageViewerApp
 
 		std::map<std::pair<int, float>, PreloadResource<sf::Texture>> loaded_textures;
 		std::vector<PreloadResource<sf::Vector2f>> texture_sizes;
+		std::vector<std::pair<int, float>> used_textures;
 
 		std::map<int, std::vector<int>> tags_indices;
 		std::map<int, std::vector<std::vector<int>>> pages;
 
 
+		std::map<int, std::pair<int, int>> pages_side;  //FOR MANGA PAGING
 		std::map<int, std::vector<int>> repage_indices; //FOR MANGA PAGING
 		float vertical_offset = 0.f; //FOR VERTICAL PAGING
 
@@ -97,10 +99,12 @@ class ImageViewerApp
 		int curr_page_index = 0;
 		int curr_tag = 0;
 
+
 		bool update_title = true;
 		bool page_changed = true;
 
 		std::map<int, std::string> user_bindings;
+
 
 		void load_config(std::string_view config_path)
 		{
@@ -140,44 +144,41 @@ class ImageViewerApp
 			return it->second.get();
 		}
 
-		std::pair<int, int> get_texture_pageside(int image_index) const
+		std::pair<int, int> get_texture_pageside(int image_index)
 		{
-			static std::map<int, std::pair<int, int>> pages_side;
 			auto it = pages_side.find(image_index);
 			if (it != pages_side.end())
 				return it->second;
-			else
+
+			Magick::Image img;
+			try
 			{
-				Magick::Image img;
-				try
-				{
-					img.read(images[image_index]);
-				}
-				catch(std::exception& e)
-				{
-					std::cerr << e.what() << std::endl;
-					pages_side[image_index] = {0, 0};
-					return {0, 0};
-				}
-
-				Magick::Image img2 = img;
-				img2.flop();
-
-				img.crop(Magick::Geometry(3, img.rows()));
-				img.resize(Magick::Geometry("1x1!"));
-				img2.crop(Magick::Geometry(3, img2.rows()));
-				img2.resize(Magick::Geometry("1x1!"));
-
-				Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
-				Magick::ColorGray avg_color_right = img2.pixelColor(0, 0);
-				float color_left = avg_color_left.shade();
-				float color_right = avg_color_right.shade();
-
-				std::pair<int, int> page_side = {color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05};
-
-				pages_side[image_index] = page_side;
-				return page_side;
+				img.read(images[image_index]);
 			}
+			catch(std::exception& e)
+			{
+				std::cerr << e.what() << std::endl;
+				pages_side[image_index] = {0, 0};
+				return {0, 0};
+			}
+
+			Magick::Image img2 = img;
+			img2.flop();
+
+			img.crop(Magick::Geometry(3, img.rows()));
+			img.resize(Magick::Geometry("1x1!"));
+			img2.crop(Magick::Geometry(3, img2.rows()));
+			img2.resize(Magick::Geometry("1x1!"));
+
+			Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
+			Magick::ColorGray avg_color_right = img2.pixelColor(0, 0);
+			float color_left = avg_color_left.shade();
+			float color_right = avg_color_right.shade();
+
+			std::pair<int, int> page_side = {color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05};
+
+			pages_side[image_index] = page_side;
+			return page_side;
 		}
 
 		void update_status()
@@ -364,20 +365,27 @@ class ImageViewerApp
 			return {scale, center_offset};
 		}
 
+		//returns size of drawn sprite
+		sf::Vector2i draw_image(int image_index, float scale, sf::Vector2i pos)
+		{
+			sf::Sprite sprite(get_texture(image_index, scale));
+			sprite.setPosition(sf::Vector2f(pos));
+			window.draw(sprite);
+
+			used_textures.emplace_back(image_index, scale);
+			return sf::Vector2i(sprite.getGlobalBounds().width, sprite.getGlobalBounds().height);
+		}
+
 		int render_manga()
 		{
 			const auto& curr_pages = pages[curr_tag];
 			auto[scale, center_offset] = get_scale_centering(curr_pages[curr_page_index]);
 
-			float pos_x = 0;
+			int pos_x = 0;
 			for (auto image_index : curr_pages[curr_page_index] | std::views::reverse)
 			{
-				sf::Sprite sprite(get_texture(image_index, scale));
-				sprite.setPosition(pos_x, 0);
-				sprite.move(sf::Vector2f(center_offset));
-				window.draw(sprite);
-
-				pos_x += sprite.getGlobalBounds().width;
+				sf::Vector2i drawn_size = draw_image(image_index, scale, center_offset + sf::Vector2i(pos_x, 0));
+				pos_x += drawn_size.x;
 			}
 
 			return 1;
@@ -388,26 +396,20 @@ class ImageViewerApp
 			int draw_tag = curr_tag;
 			int draw_page_index = curr_page_index;
 
+			bool lastpage = false;
 			int pos_y = -vertical_offset;
 			int n_pages = 0;
-			while (pos_y < (int)window.getSize().y)
+			while (pos_y < (int)window.getSize().y && !lastpage)
 			{
 				const auto& draw_page = pages[draw_tag][draw_page_index];
 				auto[scale, center_offset] = get_scale_centering(draw_page);
 
-				sf::Sprite sprite(get_texture(draw_page[0], scale));
-				sprite.setPosition(0, pos_y);
-				sprite.move(sf::Vector2f(center_offset));
-				window.draw(sprite);
+				sf::Vector2i drawn_size = draw_image(draw_page[0], scale, center_offset + sf::Vector2i(0, pos_y));
+
+				std::tie(draw_tag, draw_page_index, lastpage) = advance_page(draw_tag, draw_page_index, 1);
+
+				pos_y += drawn_size.y;
 				n_pages++;
-
-				pos_y += sprite.getGlobalBounds().height;
-
-				bool stop = false;
-				std::tie(draw_tag, draw_page_index, stop) = advance_page(draw_tag, draw_page_index, 1);
-
-				if (stop)
-					break;
 			}
 
 			return n_pages;
@@ -424,16 +426,14 @@ class ImageViewerApp
 			else
 				n_drawn_pages = render_vertical();
 
-			std::vector<std::pair<int, float>> used_textures;
-
-			for (int offset = -1; offset <= n_drawn_pages; ++offset)
+			std::array preload_offsets{-1, n_drawn_pages};
+			for (auto offset : preload_offsets)
 			{
 				auto[preload_tag, preload_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
 				if (hit_border)
 					continue;
 
 				const auto& preload_page = pages[preload_tag][preload_page_index];
-
 				auto[scale, centering] = get_scale_centering(preload_page);
 				for (int image_index : preload_page)
 				{
@@ -442,11 +442,12 @@ class ImageViewerApp
 				}
 			}
 
-			std::erase_if(loaded_textures, [&used_textures](const auto& item)
+			std::erase_if(loaded_textures, [this](const auto& item)
 				{
 					return std::find(used_textures.begin(), used_textures.end(), item.first)
 						== used_textures.end();
 				});
+			used_textures.clear();
 		}
 
 		//pair returns {new tag, new index, hit border}
@@ -512,7 +513,7 @@ class ImageViewerApp
 			float curr_tex_height = texture_sizes[curr_page[0]].get().y;
 
 			bool hit_border;
-			while ((vertical_offset >= curr_tex_height * scale || vertical_offset < 0) && !hit_border)
+			while (vertical_offset >= curr_tex_height * scale || vertical_offset < 0)
 			{
 				if (vertical_offset >= curr_tex_height * scale)
 				{
