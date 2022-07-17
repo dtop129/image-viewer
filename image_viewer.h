@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -15,16 +16,16 @@
 #include <Magick++.h>
 #include "BS_thread_pool.hpp"
 
-class PreloadResourceBase
+class LazyLoadBase
 {
 	protected:
 		static BS::thread_pool pool;
 };
 
-BS::thread_pool PreloadResourceBase::pool;
+BS::thread_pool LazyLoadBase::pool;
 
 template<class T>
-class PreloadResource : public PreloadResourceBase
+class LazyLoad : public LazyLoadBase
 {
 	private:
 		T resource;
@@ -34,12 +35,12 @@ class PreloadResource : public PreloadResourceBase
 		bool loaded = false;
 
 	public:
-		PreloadResource(std::function<T()> f) : getter(f)
+		LazyLoad(std::function<T()> f) : getter(f)
 		{
 			loading_resource = pool.submit(f);
 		}
 
-		PreloadResource(const T& val) : resource(val)
+		LazyLoad(const T& val) : resource(val)
 		{
 			loaded = true;
 		}
@@ -91,8 +92,8 @@ class ImageViewerApp
 		ViewMode mode = ViewMode::Manga;
 		std::vector<std::string> images;
 
-		std::map<std::pair<int, float>, PreloadResource<sf::Texture>> loaded_textures;
-		std::vector<PreloadResource<sf::Vector2f>> texture_sizes;
+		std::map<std::pair<int, float>, LazyLoad<sf::Texture>> loaded_textures;
+		std::vector<LazyLoad<sf::Vector2f>> texture_sizes;
 		std::vector<std::pair<int, float>> used_textures;
 
 		std::map<int, std::vector<int>> tags_indices;
@@ -554,7 +555,10 @@ class ImageViewerApp
 			}
 
 			if (old_tag != curr_tag || old_page_index != curr_page_index)
+			{
+				curr_image_index = curr_page[0];
 				page_changed = true;
+			}
 		}
 
 		void poll_events()
@@ -566,15 +570,15 @@ class ImageViewerApp
 					window.close();
 				else if (event.type == sf::Event::Resized)
 				{
-					sf::View new_view(sf::FloatRect(0.f, 0.f, event.size.width, event.size.height));
+					sf::View new_view(sf::FloatRect(sf::Vector2f(0.f, 0.f), sf::Vector2f(event.size.width, event.size.height)));
 					window.setView(new_view);
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
-					if ((event.key.code == sf::Keyboard::Space || event.key.code == sf::Keyboard::BackSpace))
+					if ((event.key.code == sf::Keyboard::Space || event.key.code == sf::Keyboard::Backspace))
 					{
 						int offset = 1;
-						if (event.key.code == sf::Keyboard::BackSpace)
+						if (event.key.code == sf::Keyboard::Backspace)
 							offset = -1;
 
 						if (mode == ViewMode::Manga)
@@ -589,14 +593,12 @@ class ImageViewerApp
 								vertical_offset = 0.f;
 								curr_tag = new_tag;
 								curr_page_index = new_page_index;
+								curr_image_index = pages[curr_tag][curr_page_index][0];
 								page_changed = true;
 							}
 						}
 						else
 							vertical_scroll(window.getSize().y * 0.5 * offset);
-
-						if (page_changed)
-							curr_image_index = pages[curr_tag][curr_page_index][0];
 					}
 					else
 					{
@@ -789,7 +791,7 @@ class ImageViewerApp
 		{
 			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
-			window.setFramerateLimit(60);
+			window.setVerticalSyncEnabled(true);
 
 			if (!config_path.empty())
 				load_config(config_path);
@@ -802,45 +804,30 @@ class ImageViewerApp
 		void run()
 		{
 			sf::Clock clock;
-			float dt = 0.f;
 			while (window.isOpen())
 			{
+				float dt = clock.restart().asSeconds();
+				if (1 / dt < 30)
+					std::cout << 1/dt << std::endl;
+
 				//std::cerr << "BOI1" << std::endl;
-				//float t0 = clock.getElapsedTime().asSeconds();
 				check_stdin();
-				//float t1 = clock.getElapsedTime().asSeconds();
 				//std::cerr << "BOI2" << std::endl;
 				poll_events();
 				//std::cerr << "BOI23" << std::endl;
-				//float t12 = clock.getElapsedTime().asSeconds();
 				handle_keyboard(dt);
-				//float t2 = clock.getElapsedTime().asSeconds();
+
 				//std::cerr << "BOI3" << std::endl;
 				update_status();
 				//std::cerr << "BOI4" << std::endl;
-				//float t3 = clock.getElapsedTime().asSeconds();
 
 				window.clear();
 				render();
 				window.display();
 				//std::cerr << "BOI5" << std::endl;
-				//float t4 = clock.getElapsedTime().asSeconds();
-
-				//float tot = t4 - t0;
-				//if (1 / tot < 50)
-				//{
-				//	std::cout << std::endl;
-				//	std::cout << "STDIN:     " << (t1 - t0) / tot << std::endl;
-				//	std::cout << "EVENTS:    " << (t12 - t1) / tot << std::endl;
-				//	std::cout << "KEYBOARD:  " << (t2 - t12) / tot << std::endl;
-				//	std::cout << "STATUS:    " << (t3 - t2) / tot << std::endl;
-				//	std::cout << "RENDERING: " << (t4 - t3) / tot << std::endl;
-				//}
 
 				page_changed = false;
 				update_title = false;
-
-				dt = clock.restart().asSeconds();
 			}
 		}
 };
