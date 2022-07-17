@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -25,7 +26,7 @@ class LazyLoadBase
 BS::thread_pool LazyLoadBase::pool;
 
 template<class T>
-class LazyLoad : public LazyLoadBase
+class LazyLoad : LazyLoadBase
 {
 	private:
 		T resource;
@@ -109,6 +110,8 @@ class ImageViewerApp
 
 		bool update_title = true;
 		bool page_changed = true;
+
+		std::map<sf::Keyboard::Key, bool> keys_state;
 
 		std::map<int, std::string> user_bindings;
 
@@ -407,7 +410,7 @@ class ImageViewerApp
 			int draw_page_index = curr_page_index;
 
 			bool lastpage = false;
-			int pos_y = -vertical_offset;
+			int pos_y = std::round(-vertical_offset);
 			int n_pages = 0;
 			while (pos_y < (int)window.getSize().y && !lastpage)
 			{
@@ -564,7 +567,7 @@ class ImageViewerApp
 		void poll_events()
 		{
 			sf::Event event;
-			while (window.pollEvent(event))
+			if (window.pollEvent(event))
 			{
 				if (event.type == sf::Event::Closed)
 					window.close();
@@ -600,12 +603,16 @@ class ImageViewerApp
 						else
 							vertical_scroll(window.getSize().y * 0.5 * offset);
 					}
-					else
+					else if (auto it = user_bindings.find((int)event.key.code); it != user_bindings.end())
 					{
-						auto it = user_bindings.find((int)event.key.code);
-						if (it != user_bindings.end())
-							run_command(it->second);
+						run_command(it->second);
 					}
+
+					keys_state[event.key.code] = 1;
+				}
+				else if (event.type == sf::Event::KeyReleased)
+				{
+					keys_state[event.key.code] = 0;
 				}
 			}
 		}
@@ -615,10 +622,10 @@ class ImageViewerApp
 			if (!window.hasFocus() || mode != ViewMode::Vertical || images.empty())
 				return;
 
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
+			if (keys_state[sf::Keyboard::Key::J] || keys_state[sf::Keyboard::Key::K])
 			{
 				float offset = 800 * dt;
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
+				if (keys_state[sf::Keyboard::Key::K])
 					offset = -1 * offset;
 
 				vertical_scroll(offset);
@@ -791,7 +798,7 @@ class ImageViewerApp
 		{
 			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
-			window.setVerticalSyncEnabled(true);
+			window.setFramerateLimit(60);
 
 			if (!config_path.empty())
 				load_config(config_path);
@@ -804,11 +811,9 @@ class ImageViewerApp
 		void run()
 		{
 			sf::Clock clock;
+			float dt = 0.f;
 			while (window.isOpen())
 			{
-				float dt = clock.restart().asSeconds();
-				if (1 / dt < 30)
-					std::cout << 1/dt << std::endl;
 
 				//std::cerr << "BOI1" << std::endl;
 				check_stdin();
@@ -828,6 +833,10 @@ class ImageViewerApp
 
 				page_changed = false;
 				update_title = false;
+
+				dt = clock.restart().asSeconds();
+				if (1 / dt < 30)
+					std::cout << 1/dt << std::endl;
 			}
 		}
 };
