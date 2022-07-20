@@ -195,7 +195,7 @@ class ImageViewerApp
 		{
 			if (update_title || page_changed)
 			{
-				if (images.empty())
+				if (tags_indices.empty())
 					window.setTitle("no images loaded");
 				else
 				{
@@ -206,7 +206,7 @@ class ImageViewerApp
 					window.setTitle(title);
 				}
 			}
-			if (!images.empty() && page_changed)
+			if (!tags_indices.empty() && page_changed)
 			{
 				std::cout << "current_image=";
 				for (const auto& image_index : pages[curr_tag][curr_page_index])
@@ -430,7 +430,7 @@ class ImageViewerApp
 
 		void render()
 		{
-			if (images.empty())
+			if (tags_indices.empty())
 				return;
 
 			int n_drawn_pages;
@@ -619,7 +619,7 @@ class ImageViewerApp
 
 		void handle_keyboard(float dt)
 		{
-			if (!window.hasFocus() || mode != ViewMode::Vertical || images.empty())
+			if (!window.hasFocus() || mode != ViewMode::Vertical || tags_indices.empty())
 				return;
 
 			if (keys_state[sf::Keyboard::Key::J] || keys_state[sf::Keyboard::Key::K])
@@ -660,7 +660,7 @@ class ImageViewerApp
 				}
 
 				update_title = true;
-				if (images.size() == 0)
+				if (tags_indices.empty())
 					curr_tag = tag;
 
 				auto& tag_indices = tags_indices[tag];
