@@ -261,7 +261,8 @@ class ImageViewerApp
 							streak_begin = i;
 							change_paging = false;
 
-							if (i != 0)
+							//DON'T TRUST WIDE PAGES AS FIRST PAGE, USUALLY IT IS NOT PART OF MANGA
+							if (i > 1)
 								start0++;
 						}
 
