@@ -41,11 +41,6 @@ class LazyLoad : LazyLoadBase
 			loading_resource = pool.submit(f);
 		}
 
-		LazyLoad(const T& val) : resource(val)
-		{
-			loaded = true;
-		}
-
 		const T& get()
 		{
 			if (loaded)
@@ -149,8 +144,9 @@ class ImageViewerApp
 			if (auto it = loaded_textures.find({image_index, scale}); it != loaded_textures.end())
 				return it->second.get();
 
-			sf::Texture tex = load_texture(images[image_index], scale);
-			auto[it, inserted] = loaded_textures.emplace(std::pair{image_index, scale}, tex);
+			auto[it, inserted] = loaded_textures.emplace(std::pair{image_index, scale},
+					[image_path = images[image_index], scale]
+					{ return load_texture(image_path, scale); });
 			return it->second.get();
 		}
 
@@ -580,6 +576,9 @@ class ImageViewerApp
 				{
 					if ((event.key.code == sf::Keyboard::Space || event.key.code == sf::Keyboard::Backspace))
 					{
+						if (tags_indices.empty())
+							return;
+
 						int offset = 1;
 						if (event.key.code == sf::Keyboard::Backspace)
 							offset = -1;
@@ -804,6 +803,7 @@ class ImageViewerApp
 				load_config(config_path);
 
 			std::cin.sync_with_stdio(false);
+			std::cin.tie(NULL);
 
 			std::cout << "current_mode=manga" << std::endl;
 		}
@@ -811,9 +811,9 @@ class ImageViewerApp
 		void run()
 		{
 			sf::Clock clock;
-			float dt = 0.f;
 			while (window.isOpen())
 			{
+				float dt = clock.restart().asSeconds();
 				//std::cerr << "BOI1" << std::endl;
 				check_stdin();
 				//std::cerr << "BOI2" << std::endl;
@@ -832,10 +832,6 @@ class ImageViewerApp
 
 				page_changed = false;
 				update_title = false;
-
-				dt = clock.restart().asSeconds();
-				if (1 / dt < 30)
-					std::cout << 1/dt << std::endl;
 			}
 		}
 };
