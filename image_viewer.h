@@ -624,7 +624,7 @@ class ImageViewerApp
 
 			if (keys_state[sf::Keyboard::Key::J] || keys_state[sf::Keyboard::Key::K])
 			{
-				float offset = 800 * dt;
+				float offset = 1500 * dt;
 				if (keys_state[sf::Keyboard::Key::K])
 					offset = -1 * offset;
 
@@ -814,7 +814,6 @@ class ImageViewerApp
 			float dt = 0.f;
 			while (window.isOpen())
 			{
-
 				//std::cerr << "BOI1" << std::endl;
 				check_stdin();
 				//std::cerr << "BOI2" << std::endl;
