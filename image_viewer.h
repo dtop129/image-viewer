@@ -659,12 +659,6 @@ class ImageViewerApp
 					args.erase(args.begin());
 				}
 
-				update_title = true;
-				if (tags_indices.empty())
-					curr_tag = tag;
-
-				auto& tag_indices = tags_indices[tag];
-
 				for (const auto& arg : args)
 				{
 					auto image_path = std::regex_replace(arg, std::regex("^ +| +$"), "$1");
@@ -693,11 +687,20 @@ class ImageViewerApp
 							});
 					}
 
+					if (tags_indices.empty())
+					{
+						curr_tag = tag;
+						curr_image_index = new_index;
+					}
+
+					auto& tag_indices = tags_indices[tag];
 					tag_indices.insert(std::upper_bound(tag_indices.begin(), tag_indices.end(), new_index,
 								[this] (int index1, int index2)
 							{
 								return images[index1] < images[index2];
 							}), new_index);
+
+					update_title = true;
 				}
 
 				if (!args.empty())
