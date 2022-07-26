@@ -33,8 +33,6 @@ class LazyLoad : LazyLoadBase
 		std::future<T> loading_resource;
 		std::function<T()> getter;
 
-		bool loaded = false;
-
 	public:
 		LazyLoad(std::function<T()> f) : getter(f)
 		{
@@ -43,11 +41,8 @@ class LazyLoad : LazyLoadBase
 
 		const T& get()
 		{
-			if (loaded)
-				return resource;
-
-			resource = loading_resource.get();
-			loaded = true;
+			if (loading_resource.valid())
+				resource = loading_resource.get();
 
 			return resource;
 		}
@@ -622,14 +617,11 @@ class ImageViewerApp
 			if (!window.hasFocus() || mode != ViewMode::Vertical || tags_indices.empty())
 				return;
 
-			if (keys_state[sf::Keyboard::Key::J] || keys_state[sf::Keyboard::Key::K])
-			{
-				float offset = 1500 * dt;
-				if (keys_state[sf::Keyboard::Key::K])
-					offset = -1 * offset;
-
-				vertical_scroll(offset);
-			}
+			float scroll_speed = 1500;
+			if (keys_state[sf::Keyboard::Key::J])
+				vertical_scroll(scroll_speed * dt);
+			if (keys_state[sf::Keyboard::Key::K])
+				vertical_scroll(-scroll_speed * dt);
 		}
 
 		void run_command(std::string_view cmd)
