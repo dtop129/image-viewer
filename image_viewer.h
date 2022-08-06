@@ -793,7 +793,7 @@ class ImageViewerApp
 		{
 			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
-			window.setFramerateLimit(60);
+			window.setVerticalSyncEnabled(true);
 
 			if (!config_path.empty())
 				load_config(config_path);
