@@ -336,38 +336,54 @@ class ImageViewerApp
 			}
 		}
 
-		std::pair<float, sf::Vector2i> get_scale_centering(const std::vector<int>& page)
+		std::pair<std::vector<float>, sf::Vector2i> get_scale_centering(const std::vector<int>& page)
 		{
-			float scale;
+			std::vector<float> scales(page.size(), 1.f);
 			sf::Vector2i center_offset(0, 0);
+
 			if (mode == ViewMode::Manga)
 			{
-				sf::Vector2f drawn_area(0, 0);
+				sf::Vector2i drawn_area(0, 0);
+				int index = 0;
 				for (const auto& image_index : page)
 				{
-					auto image_size = texture_sizes[image_index].get();
+					sf::Vector2f image_size = texture_sizes[image_index].get();
+
+					if (drawn_area.y != 0 && image_size.y != drawn_area.y)
+					{
+						scales[index] = drawn_area.y / image_size.y;
+						image_size.x *= scales[index];
+						image_size.y = drawn_area.y;
+					}
 
 					drawn_area.x += image_size.x;
-					drawn_area.y = std::max(drawn_area.y, image_size.y);
+					drawn_area.y = std::max(drawn_area.y, (int)image_size.y);
+
+					index++;
 				}
 
-				float scale_x = window.getSize().x / drawn_area.x;
-				float scale_y = window.getSize().y / drawn_area.y;
+				float scale_x = (float)window.getSize().x / drawn_area.x;
+				float scale_y = (float)window.getSize().y / drawn_area.y;
 
-				scale = std::min(scale_x, scale_y);
-				center_offset.x = (window.getSize().x - drawn_area.x * scale) / 2.f;
-				center_offset.y = (window.getSize().y - drawn_area.y * scale) / 2.f;
+				float global_scale = std::min(scale_x, scale_y);
+				center_offset.x = (window.getSize().x - drawn_area.x * global_scale) / 2.f;
+				center_offset.y = (window.getSize().y - drawn_area.y * global_scale) / 2.f;
+
+				for (auto& scale_fac : scales)
+					scale_fac *= global_scale;
 			}
 			else
 			{
 				int image_index = page[0];
 				int width = texture_sizes[image_index].get().x;
 
-				scale = std::min(700.f, 0.8f * window.getSize().x) / width;
+				float scale = std::min(700.f, 0.8f * window.getSize().x) / width;
 				center_offset.x = (window.getSize().x - width * scale) / 2.f;
+
+				scales = { scale };
 			}
 
-			return {scale, center_offset};
+			return {scales, center_offset};
 		}
 
 		//returns size of drawn sprite
@@ -384,13 +400,15 @@ class ImageViewerApp
 		int render_manga()
 		{
 			const auto& curr_pages = pages[curr_tag];
-			auto[scale, center_offset] = get_scale_centering(curr_pages[curr_page_index]);
+			auto[scales, center_offset] = get_scale_centering(curr_pages[curr_page_index]);
 
+			int index = curr_pages[curr_page_index].size() - 1;
 			int pos_x = 0;
 			for (auto image_index : curr_pages[curr_page_index] | std::views::reverse)
 			{
-				sf::Vector2i drawn_size = draw_image(image_index, scale, center_offset + sf::Vector2i(pos_x, 0));
+				sf::Vector2i drawn_size = draw_image(image_index, scales[index], center_offset + sf::Vector2i(pos_x, 0));
 				pos_x += drawn_size.x;
+				index--;
 			}
 
 			return 1;
@@ -407,9 +425,9 @@ class ImageViewerApp
 			while (pos_y < (int)window.getSize().y && !lastpage)
 			{
 				const auto& draw_page = pages[draw_tag][draw_page_index];
-				auto[scale, center_offset] = get_scale_centering(draw_page);
+				auto[scales, center_offset] = get_scale_centering(draw_page);
 
-				sf::Vector2i drawn_size = draw_image(draw_page[0], scale, center_offset + sf::Vector2i(0, pos_y));
+				sf::Vector2i drawn_size = draw_image(draw_page[0], scales[0], center_offset + sf::Vector2i(0, pos_y));
 
 				std::tie(draw_tag, draw_page_index, lastpage) = advance_page(draw_tag, draw_page_index, 1);
 
@@ -439,11 +457,13 @@ class ImageViewerApp
 					continue;
 
 				const auto& preload_page = pages[preload_tag][preload_page_index];
-				auto[scale, centering] = get_scale_centering(preload_page);
+				auto[scales, centering] = get_scale_centering(preload_page);
+				int index = 0;
 				for (int image_index : preload_page)
 				{
-					preload_texture_async(image_index, scale);
-					used_textures.emplace_back(image_index, scale);
+					preload_texture_async(image_index, scales[index]);
+					used_textures.emplace_back(image_index, scales[index]);
+					index++;
 				}
 			}
 
@@ -512,22 +532,22 @@ class ImageViewerApp
 			int old_page_index = curr_page_index;
 
 			auto curr_page = pages[curr_tag][curr_page_index];
-			auto[scale, center_offset] = get_scale_centering(curr_page);
+			auto[scales, center_offset] = get_scale_centering(curr_page);
 
 			vertical_offset += offset;
 			float curr_tex_height = texture_sizes[curr_page[0]].get().y;
 
 			bool hit_border;
-			while (vertical_offset >= curr_tex_height * scale || vertical_offset < 0)
+			while (vertical_offset >= curr_tex_height * scales[0] || vertical_offset < 0)
 			{
-				if (vertical_offset >= curr_tex_height * scale)
+				if (vertical_offset >= curr_tex_height * scales[0])
 				{
-					vertical_offset -= curr_tex_height * scale;
+					vertical_offset -= curr_tex_height * scales[0];
 
 					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, 1);
 					if (hit_border)
 					{
-						vertical_offset = curr_tex_height * scale;
+						vertical_offset = curr_tex_height * scales[0];
 						break;
 					}
 				}
@@ -540,12 +560,12 @@ class ImageViewerApp
 					}
 
 					curr_tex_height = texture_sizes[pages[curr_tag][curr_page_index][0]].get().y;
-					auto[scale, center_offset] = get_scale_centering(pages[curr_tag][curr_page_index]);
-					vertical_offset += curr_tex_height * scale;
+					auto[scales, center_offset] = get_scale_centering(pages[curr_tag][curr_page_index]);
+					vertical_offset += curr_tex_height * scales[0];
 				}
 
 				curr_page = pages[curr_tag][curr_page_index];
-				std::tie(scale, center_offset) = get_scale_centering(curr_page);
+				std::tie(scales, center_offset) = get_scale_centering(curr_page);
 				curr_tex_height = texture_sizes[curr_page[0]].get().y;
 			}
 
