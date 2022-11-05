@@ -579,7 +579,7 @@ class ImageViewerApp
 		void poll_events()
 		{
 			sf::Event event;
-			if (window.pollEvent(event))
+			while (window.pollEvent(event))
 			{
 				if (event.type == sf::Event::Closed)
 					window.close();
