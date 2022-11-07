@@ -103,24 +103,61 @@ class ImageViewerApp
 
 		std::map<sf::Keyboard::Key, bool> keys_state;
 
-		std::map<int, std::string> user_bindings;
+		std::map<int, std::string> keyboard_bindings;
+		std::map<int, std::string> mouse_bindings;
 
 
 		void load_config(std::string_view config_path)
 		{
-			char binding;
+			std::string binding_name;
 			std::string command;
 
 			std::ifstream stream = std::ifstream(std::string(config_path));
 
-			while (stream >> binding)
+			while (stream >> binding_name)
 			{
 				std::getline(stream, command);
 				auto str_begin = command.find_first_not_of(" ");
 				command = command.substr(str_begin);
 
-				int key = sf::Keyboard::Key::A + (binding - 'a');
-				user_bindings[key] = command;
+				if (binding_name[0] == '<' && binding_name.length() > 1)
+				{
+					std::size_t end_bracket_index = binding_name.find('>');
+					if (end_bracket_index == std::string::npos)
+					{
+						std::cerr << binding_name << " is an invalid binding\n";
+						continue;
+					}
+
+					binding_name = binding_name.substr(1, end_bracket_index - 1);
+					int key;
+					if (binding_name == "space")
+						key = sf::Keyboard::Space;
+					else if (binding_name == "backspace")
+						key = sf::Keyboard::Backspace;
+
+					keyboard_bindings[key] = command;
+				}
+				else if (binding_name[0] == 'm' && binding_name.length() == 2)
+				{
+					//0 LEFT
+					//1 RIGHT
+					//2 MIDDLE
+					int button_number = binding_name[1] - '0';
+					int button = sf::Mouse::Left + button_number;
+					mouse_bindings[button] = command;
+				}
+				else if (binding_name.length() == 1)
+				{
+					char binding = binding_name[0];
+					int key = sf::Keyboard::Key::A + (binding - 'a');
+					keyboard_bindings[key] = command;
+				}
+				else
+				{
+						std::cerr << binding_name << " is an invalid binding\n";
+						continue;
+				}
 			}
 		}
 
@@ -590,44 +627,19 @@ class ImageViewerApp
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
-					if ((event.key.code == sf::Keyboard::Space || event.key.code == sf::Keyboard::Backspace))
-					{
-						if (tags_indices.empty())
-							return;
-
-						int offset = 1;
-						if (event.key.code == sf::Keyboard::Backspace)
-							offset = -1;
-
-						if (mode == ViewMode::Manga)
-						{
-							auto[prev_tag, prev_page_index] = std::tie(curr_tag, curr_page_index);
-							auto[new_tag, new_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
-
-							if (prev_tag == new_tag && prev_page_index == new_page_index)
-								std::cout << "last_in_dir=" << offset << std::endl;
-							else
-							{
-								vertical_offset = 0.f;
-								curr_tag = new_tag;
-								curr_page_index = new_page_index;
-								curr_image_index = pages[curr_tag][curr_page_index][0];
-								page_changed = true;
-							}
-						}
-						else
-							vertical_scroll(window.getSize().y * 0.5 * offset);
-					}
-					else if (auto it = user_bindings.find((int)event.key.code); it != user_bindings.end())
-					{
+					if (auto it = keyboard_bindings.find((int)event.key.code); it != keyboard_bindings.end())
 						run_command(it->second);
-					}
 
 					keys_state[event.key.code] = 1;
 				}
 				else if (event.type == sf::Event::KeyReleased)
 				{
 					keys_state[event.key.code] = 0;
+				}
+				else if (event.type == sf::Event::MouseButtonPressed)
+				{
+					if (auto it = mouse_bindings.find((int)event.mouseButton.button); it != mouse_bindings.end())
+						run_command(it->second);
 				}
 			}
 		}
@@ -755,6 +767,24 @@ class ImageViewerApp
 				}
 				else
 					std::cerr << "tag " << tag << " not present" << std::endl;
+			}
+			else if (action == "goto_relative")
+			{
+				int offset = std::stoi(args[0]);
+
+				auto[prev_tag, prev_page_index] = std::tie(curr_tag, curr_page_index);
+				auto[new_tag, new_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
+
+				if (prev_tag == new_tag && prev_page_index == new_page_index)
+					std::cout << "last_in_dir=" << offset << std::endl;
+				else
+				{
+					vertical_offset = 0.f;
+					curr_tag = new_tag;
+					curr_page_index = new_page_index;
+					curr_image_index = pages[curr_tag][curr_page_index][0];
+					page_changed = true;
+				}
 			}
 			else if (action == "repage")
 			{
