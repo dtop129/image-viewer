@@ -322,10 +322,10 @@ class ImageViewerApp
 						{
 							if (i + 1 != (int)tag_indices.size())
 							{
-								if (i - streak_begin % 2 == 0)
-									start0++;
-								else
+								if ((i - streak_begin) % 2 == 0)
 									start1++;
+								else
+									start0++;
 							}
 
 							lone_page[streak_begin] = start1 > start0;
