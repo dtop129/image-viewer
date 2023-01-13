@@ -66,6 +66,7 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 	image.write(&blob);
 	sf::Image sf_image;
 	sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
+	//sf_image.create(sf::Vector2u(image.columns(), image.rows()), (unsigned char*)blob.data());
 
 	sf::Texture tex;
 	tex.loadFromImage(sf_image);
@@ -280,6 +281,7 @@ class ImageViewerApp
 				bool change_paging = false;
 				for (int i = 0; i < (int)tag_indices.size(); ++i)
 				{
+					//printf("index:%d\n", i);
 					if (!lone_page[i] && check_status != 1 &&
 							(i == 0 || lone_page[i - 1]))
 						check_status = 2;
@@ -302,6 +304,7 @@ class ImageViewerApp
 							change_paging = !change_paging;
 
 						auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
+						//printf("right:%d left:%d\n", is_right, is_left);
 
 						if (is_right)
 						{
@@ -328,12 +331,14 @@ class ImageViewerApp
 									start0++;
 							}
 
-							lone_page[streak_begin] = start1 > start0;
+							lone_page[streak_begin] = start1 >= start0;
 							if (change_paging)
 								lone_page[streak_begin] = 1 - lone_page[streak_begin];
 
 							check_status = 0;
 						}
+
+						//printf("%d %d\n", start0, start1);
 					}
 				}
 
@@ -842,6 +847,7 @@ class ImageViewerApp
 		ImageViewerApp(std::string_view config_path)
 		{
 			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
+			//window.create(sf::VideoMode(sf::Vector2u(800, 600)), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
 			window.setVerticalSyncEnabled(true);
 
