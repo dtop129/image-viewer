@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -669,12 +670,27 @@ class ImageViewerApp
 			auto arg_begin = cmd.begin() + action.length() + 1;
 			while (arg_begin != cmd.end())
 			{
+				std::vector<uint> backslash_indices;
 				auto next_sep_iter = std::find(arg_begin, cmd.end(), ',');
+				while (*(next_sep_iter - 1) == '\\' && next_sep_iter != cmd.end())
+				{
+					backslash_indices.push_back(next_sep_iter - 1 - arg_begin);
+					next_sep_iter = std::find(next_sep_iter + 1, cmd.end(), ',');
+				}
+
 				if (next_sep_iter == cmd.end())
 					next_sep_iter--;
 
 				if (next_sep_iter - arg_begin > 0)
+				{
 					args.emplace_back(arg_begin, next_sep_iter);
+					int counter = 0;
+					for (auto i : backslash_indices)
+					{
+						args.back().erase(i - counter, 1);
+						counter++;
+					}
+				}
 
 				arg_begin = next_sep_iter + 1;
 			}
@@ -693,6 +709,12 @@ class ImageViewerApp
 					auto image_path = std::regex_replace(arg, std::regex("^ +| +$"), "$1");
 					if (image_path.empty())
 						continue;
+
+					if (!std::filesystem::exists(image_path))
+					{
+						std::cerr << image_path <<  " not found\n";
+						continue;
+					}
 
 					auto image_it = std::find(images.begin(), images.end(), image_path);
 					int new_index = std::distance(images.begin(), image_it);
