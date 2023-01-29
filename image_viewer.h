@@ -304,7 +304,9 @@ class ImageViewerApp
 						if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
 							change_paging = !change_paging;
 
-						auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
+						bool is_right = 0, is_left = 0;
+						if (i < 30)
+							std::tie(is_right, is_left) = get_texture_pageside(tag_indices[i]);
 						//printf("right:%d left:%d\n", is_right, is_left);
 
 						if (is_right)
@@ -876,6 +878,7 @@ class ImageViewerApp
 			if (!config_path.empty())
 				load_config(config_path);
 
+			std::cout.sync_with_stdio(false);
 			std::cin.sync_with_stdio(false);
 			std::cin.tie(NULL);
 
@@ -885,27 +888,29 @@ class ImageViewerApp
 		void run()
 		{
 			sf::Clock clock;
+			//long long i = 0;
 			while (window.isOpen())
 			{
 				float dt = clock.restart().asSeconds();
-				//std::cerr << "BOI1" << std::endl;
+				//std::cerr << "1 " << i << std::endl;
 				check_stdin();
-				//std::cerr << "BOI2" << std::endl;
+				//std::cerr << "2 " << i << std::endl;
 				poll_events();
-				//std::cerr << "BOI23" << std::endl;
+				//std::cerr << "3 " << i << std::endl;
 				handle_keyboard(dt);
+				//std::cerr << "4 " << i << std::endl;
 
-				//std::cerr << "BOI3" << std::endl;
 				update_status();
-				//std::cerr << "BOI4" << std::endl;
+				//std::cerr << "5 " << i << std::endl;
 
 				window.clear();
 				render();
 				window.display();
-				//std::cerr << "BOI5" << std::endl;
+				//std::cerr << "6 " << i << std::endl;
 
 				page_changed = false;
 				update_title = false;
+				//i++;
 			}
 		}
 };
