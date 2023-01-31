@@ -18,6 +18,19 @@
 #include <Magick++.h>
 #include "BS_thread_pool.hpp"
 
+std::wstring s2ws(const std::string& s) {
+	std::string curLocale = setlocale(LC_ALL, ""); 
+	const char* _Source = s.c_str();
+	size_t _Dsize = mbstowcs(NULL, _Source, 0) + 1;
+	wchar_t *_Dest = new wchar_t[_Dsize];
+	wmemset(_Dest, 0, _Dsize);
+	mbstowcs(_Dest,_Source,_Dsize);
+	std::wstring result = _Dest;
+	delete []_Dest;
+	setlocale(LC_ALL, curLocale.c_str());
+	return result;
+}
+
 class LazyLoadBase
 {
 	protected:
@@ -233,7 +246,8 @@ class ImageViewerApp
 					int relative_index = std::find(tag_indices.begin(), tag_indices.end(), curr_image_index) - tag_indices.begin();
 
 					std::string title = std::to_string(curr_tag) + " - " + images[curr_image_index] + " [" + std::to_string(relative_index + 1) + "/" + std::to_string(tag_indices.size()) + "]";
-					window.setTitle(title);
+					sf::String wtitle(s2ws(title));
+					window.setTitle(wtitle);
 				}
 			}
 			if (!tags_indices.empty() && page_changed)
