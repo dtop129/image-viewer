@@ -304,24 +304,25 @@ class ImageViewerApp
 						if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
 							change_paging = !change_paging;
 
-						bool is_right = 0, is_left = 0;
 						if (i < 30)
-							std::tie(is_right, is_left) = get_texture_pageside(tag_indices[i]);
-						//printf("right:%d left:%d\n", is_right, is_left);
+						{
+							auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
+							//printf("right:%d left:%d\n", is_right, is_left);
 
-						if (is_right)
-						{
-							if ((i - streak_begin) % 2 == 0)
-								start0++;
-							else
-								start1++;
-						}
-						if (is_left)
-						{
-							if ((i - streak_begin) % 2 == 0)
-								start1++;
-							else
-								start0++;
+							if (is_right)
+							{
+								if ((i - streak_begin) % 2 == 0)
+									start0++;
+								else
+									start1++;
+							}
+							if (is_left)
+							{
+								if ((i - streak_begin) % 2 == 0)
+									start1++;
+								else
+									start0++;
+							}
 						}
 
 						if (i + 1 == (int)tag_indices.size() || lone_page[i + 1])
