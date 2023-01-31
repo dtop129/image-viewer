@@ -18,6 +18,7 @@
 #include <Magick++.h>
 #include "BS_thread_pool.hpp"
 
+
 std::wstring s2ws(const std::string& s) {
 	std::string curLocale = setlocale(LC_ALL, ""); 
 	const char* _Source = s.c_str();
@@ -318,7 +319,7 @@ class ImageViewerApp
 						if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
 							change_paging = !change_paging;
 
-						if (i < 30)
+						if (i < 30 || (i < 60 && std::abs(start0 - start1) < 5))
 						{
 							auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
 							//printf("right:%d left:%d\n", is_right, is_left);
