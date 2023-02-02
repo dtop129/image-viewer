@@ -89,7 +89,7 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 }
 
 
-enum class ViewMode { Manga, Vertical };
+enum class ViewMode { Manga, Vertical, Single };
 
 class ImageViewerApp
 {
@@ -170,10 +170,7 @@ class ImageViewerApp
 					keyboard_bindings[key] = command;
 				}
 				else
-				{
-						std::cerr << binding_name << " is an invalid binding\n";
-						continue;
-				}
+					std::cerr << binding_name << " is an invalid binding\n";
 			}
 		}
 
@@ -402,7 +399,7 @@ class ImageViewerApp
 			std::vector<float> scales(page.size(), 1.f);
 			sf::Vector2i center_offset(0, 0);
 
-			if (mode == ViewMode::Manga)
+			if (mode == ViewMode::Manga || mode == ViewMode::Single)
 			{
 				sf::Vector2i drawn_area(0, 0);
 				int index = 0;
@@ -505,7 +502,7 @@ class ImageViewerApp
 				return;
 
 			int n_drawn_pages;
-			if (mode == ViewMode::Manga)
+			if (mode == ViewMode::Manga || mode == ViewMode::Single)
 				n_drawn_pages = render_manga();
 			else
 				n_drawn_pages = render_vertical();
@@ -851,6 +848,8 @@ class ImageViewerApp
 				ViewMode prev_mode = mode;
 				if (args[0] == "manga")
 					mode = ViewMode::Manga;
+				else if (args[0] == "single")
+					mode = ViewMode::Single;
 				else if (args[0] == "vertical")
 					mode = ViewMode::Vertical;
 				else
