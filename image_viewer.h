@@ -3,7 +3,6 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -15,7 +14,6 @@
 #include <vector>
 
 #include <SFML/Graphics.hpp>
-#include <Magick++.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -66,26 +64,23 @@ class LazyLoad : LazyLoadBase
 
 sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 {
-	Magick::Image image;
-	try
-	{
-		image.read(image_path);
-	}
-	catch (std::exception& e)
-	{
+	int h, w, c;
+	unsigned char* pixels = stbi_load(image_path.c_str(), &w, &h, &c, 4);
+	if (pixels == nullptr)
 		return sf::Texture();
-	}
 
-	image.magick("RGBA");
-	image.resize(Magick::Geometry(image.columns() * scale, image.rows() * scale));
-	Magick::Blob blob;
-	image.write(&blob);
-	sf::Image sf_image;
-	//sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
-	sf_image.create(sf::Vector2u(image.columns(), image.rows()), (unsigned char*)blob.data());
+	int new_h = h * scale;
+	int new_w = w * scale;
+	std::vector<unsigned char> resized_pixels(new_w * new_h * 4);
+
+	static avir::CImageResizer<> resizer(8);
+	resizer.resizeImage(pixels, w, h, 0, resized_pixels.data(), new_w, new_h, 4, 0);
 
 	sf::Texture tex;
-	tex.loadFromImage(sf_image);
+	if (!tex.create(sf::Vector2u(new_w, new_h)))
+		return sf::Texture();
+
+	tex.update(resized_pixels.data());
 	return tex;
 }
 
@@ -738,17 +733,15 @@ class ImageViewerApp
 						images.push_back(image_path);
 						texture_sizes.emplace_back([image_path]
 							{
-								try
+								int w, h, c;
+								int ok = stbi_info(image_path.c_str(), &w, &h, &c);
+								if (ok == 0)
 								{
-									Magick::Image img;
-									img.ping(image_path);
-									return sf::Vector2f(img.columns(), img.rows());
-								}
-								catch (std::exception& e)
-								{
-									std::cerr << e.what() << std::endl;
+									std::cerr << "error loading " << image_path << '\n';
 									return sf::Vector2f(0.f, 0.f);
 								}
+
+								return sf::Vector2f(w, h);
 							});
 					}
 
@@ -768,19 +761,8 @@ class ImageViewerApp
 					update_title = true;
 				}
 
-				using std::chrono::high_resolution_clock;
-				using std::chrono::duration_cast;
-				using std::chrono::duration;
-				using std::chrono::milliseconds;
-
-				auto t1 = high_resolution_clock::now();
 				if (!args.empty())
 					update_paging(tag);
-				auto t2 = high_resolution_clock::now();
-				/* Getting number of milliseconds as an integer. */
-				auto ms_int = duration_cast<milliseconds>(t2 - t1);
-
-				std::cout << ms_int.count() << "ms\n";
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{

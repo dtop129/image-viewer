@@ -1,5 +1,5 @@
-CXXFLAGS = -fopenmp -O3 -std=c++20 -Wall $(shell GraphicsMagick++-config --cppflags --cxxflags) -Iinclude
-LIBS = -fopenmp $(shell GraphicsMagick++-config --ldflags --libs) -lsfml-graphics -lsfml-window -lsfml-system
+CXXFLAGS = -O3 -std=c++20 -Wall -Iinclude
+LIBS = -lsfml-graphics -lsfml-window -lsfml-system
 
 HEADERS = image_viewer.h
 OBJS = image_viewer.o
