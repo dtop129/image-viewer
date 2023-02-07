@@ -16,20 +16,21 @@
 
 #include <SFML/Graphics.hpp>
 #include <Magick++.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+#include "avir.h"
+
 #include "BS_thread_pool.hpp"
 
 
 std::wstring s2ws(const std::string& s) {
 	std::string curLocale = setlocale(LC_ALL, ""); 
-	const char* _Source = s.c_str();
-	size_t _Dsize = mbstowcs(NULL, _Source, 0) + 1;
-	wchar_t *_Dest = new wchar_t[_Dsize];
-	wmemset(_Dest, 0, _Dsize);
-	mbstowcs(_Dest,_Source,_Dsize);
-	std::wstring result = _Dest;
-	delete []_Dest;
+	std::wstring ws(s.size(), L' '); // Overestimate number of code points.
+	ws.resize(std::mbstowcs(&ws[0], s.c_str(), s.size())); // Shrink to fit.
 	setlocale(LC_ALL, curLocale.c_str());
-	return result;
+	return ws;
 }
 
 class LazyLoadBase
@@ -80,8 +81,8 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 	Magick::Blob blob;
 	image.write(&blob);
 	sf::Image sf_image;
-	sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
-	//sf_image.create(sf::Vector2u(image.columns(), image.rows()), (unsigned char*)blob.data());
+	//sf_image.create(image.columns(), image.rows(), (sf::Uint8*)blob.data());
+	sf_image.create(sf::Vector2u(image.columns(), image.rows()), (unsigned char*)blob.data());
 
 	sf::Texture tex;
 	tex.loadFromImage(sf_image);
@@ -101,7 +102,6 @@ class ImageViewerApp
 
 		std::map<std::pair<int, float>, LazyLoad<sf::Texture>> loaded_textures;
 		std::vector<LazyLoad<sf::Vector2f>> texture_sizes;
-		std::vector<std::pair<int, float>> used_textures;
 
 		std::map<int, std::vector<int>> tags_indices;
 		std::map<int, std::vector<std::vector<int>>> pages;
@@ -201,32 +201,33 @@ class ImageViewerApp
 			if (it != pages_side.end())
 				return it->second;
 
-			Magick::Image img;
-			try
+			int w, h, c;
+			unsigned char* pixels = stbi_load(images[image_index].c_str(), &w, &h, &c, 3);
+			if (pixels == nullptr)
 			{
-				img.read(images[image_index]);
-			}
-			catch(std::exception& e)
-			{
-				std::cerr << e.what() << std::endl;
 				pages_side[image_index] = {0, 0};
 				return {0, 0};
 			}
 
-			Magick::Image img2 = img;
-			img2.flop();
+			unsigned int color_left = 0, color_right = 0;
+			for (int y = 0; y < h; y++)
+			{
+				for (int x = 0; x < 3; x++)
+				{
+					unsigned char* pixel = pixels + (x + w * y) * 3;
+					color_left += pixel[0] + pixel[1] + pixel[2];
+				}
+				for (int x = w - 1; x >= w - 3; x--)
+				{
+					unsigned char* pixel = pixels + (x + w * y) * 3;
+					color_right += pixel[0] + pixel[1] + pixel[2];
+				}
+			}
+			color_left = color_left / (3 * h) / 3;
+			color_right = color_right / (3 * h) / 3;
+			stbi_image_free(pixels);
 
-			img.crop(Magick::Geometry(3, img.rows()));
-			img.resize(Magick::Geometry("1x1!"));
-			img2.crop(Magick::Geometry(3, img2.rows()));
-			img2.resize(Magick::Geometry("1x1!"));
-
-			Magick::ColorGray avg_color_left = img.pixelColor(0, 0);
-			Magick::ColorGray avg_color_right = img2.pixelColor(0, 0);
-			float color_left = avg_color_left.shade();
-			float color_right = avg_color_right.shade();
-
-			std::pair<int, int> page_side = {color_left > 0.95 || color_left < 0.05, color_right > 0.95 || color_right < 0.05};
+			std::pair<int, int> page_side = {color_left > 245 || color_left < 10, color_right > 245 || color_right < 10};
 
 			pages_side[image_index] = page_side;
 			return page_side;
@@ -244,8 +245,7 @@ class ImageViewerApp
 					int relative_index = std::find(tag_indices.begin(), tag_indices.end(), curr_image_index) - tag_indices.begin();
 
 					std::string title = std::to_string(curr_tag) + " - " + images[curr_image_index] + " [" + std::to_string(relative_index + 1) + "/" + std::to_string(tag_indices.size()) + "]";
-					sf::String wtitle(s2ws(title));
-					window.setTitle(wtitle);
+					window.setTitle(s2ws(title));
 				}
 			}
 			if (!tags_indices.empty() && page_changed)
@@ -451,7 +451,6 @@ class ImageViewerApp
 			sprite.setPosition(sf::Vector2f(pos));
 			window.draw(sprite);
 
-			used_textures.emplace_back(image_index, scale);
 			return sf::Vector2i(sprite.getGlobalBounds().width, sprite.getGlobalBounds().height);
 		}
 
@@ -507,7 +506,8 @@ class ImageViewerApp
 			else
 				n_drawn_pages = render_vertical();
 
-			std::array preload_offsets{-1, n_drawn_pages};
+			std::vector<std::pair<int, float>> used_textures;
+			std::array preload_offsets{-1, 0, n_drawn_pages};
 			for (auto offset : preload_offsets)
 			{
 				auto[preload_tag, preload_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
@@ -525,12 +525,11 @@ class ImageViewerApp
 				}
 			}
 
-			std::erase_if(loaded_textures, [this](const auto& item)
+			std::erase_if(loaded_textures, [&used_textures](const auto& item)
 				{
 					return std::find(used_textures.begin(), used_textures.end(), item.first)
 						== used_textures.end();
 				});
-			used_textures.clear();
 		}
 
 		//pair returns {new tag, new index, hit border}
@@ -769,8 +768,19 @@ class ImageViewerApp
 					update_title = true;
 				}
 
+				using std::chrono::high_resolution_clock;
+				using std::chrono::duration_cast;
+				using std::chrono::duration;
+				using std::chrono::milliseconds;
+
+				auto t1 = high_resolution_clock::now();
 				if (!args.empty())
 					update_paging(tag);
+				auto t2 = high_resolution_clock::now();
+				/* Getting number of milliseconds as an integer. */
+				auto ms_int = duration_cast<milliseconds>(t2 - t1);
+
+				std::cout << ms_int.count() << "ms\n";
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
@@ -885,8 +895,8 @@ class ImageViewerApp
 	public:
 		ImageViewerApp(std::string_view config_path)
 		{
-			window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
-			//window.create(sf::VideoMode(sf::Vector2u(800, 600)), "image viewer", sf::Style::Default);
+			//window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
+			window.create(sf::VideoMode(sf::Vector2u(800, 600)), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
 			window.setVerticalSyncEnabled(true);
 

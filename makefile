@@ -1,5 +1,5 @@
-CXXFLAGS = -O3 -std=c++20 -Wall $(shell GraphicsMagick++-config --cppflags --cxxflags --ldflags) -Iinclude
-LIBS = $(shell GraphicsMagick++-config --libs) -lsfml-graphics -lsfml-window -lsfml-system
+CXXFLAGS = -fopenmp -O3 -std=c++20 -Wall $(shell GraphicsMagick++-config --cppflags --cxxflags) -Iinclude
+LIBS = -fopenmp $(shell GraphicsMagick++-config --ldflags --libs) -lsfml-graphics -lsfml-window -lsfml-system
 
 HEADERS = image_viewer.h
 OBJS = image_viewer.o
@@ -8,7 +8,7 @@ OBJS = image_viewer.o
 	g++ -c -o $@ $< $(CXXFLAGS)
 
 image_viewer: $(OBJS)
-	g++ -o $@ $(OBJS) $(CXXFLAGS) $(LIBS)
+	g++ -o $@ $(OBJS) $(LIBS)
 
 install: image_viewer
 	cp -f image_viewer /usr/local/bin
