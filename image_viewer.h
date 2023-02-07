@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -17,7 +18,6 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-
 #include "avir.h"
 
 #include "BS_thread_pool.hpp"
@@ -37,7 +37,7 @@ class LazyLoadBase
 		static BS::thread_pool pool;
 };
 
-BS::thread_pool LazyLoadBase::pool;
+BS::thread_pool LazyLoadBase::pool(1);
 
 template<class T>
 class LazyLoad : LazyLoadBase
@@ -75,6 +75,7 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 
 	static avir::CImageResizer<> resizer(8);
 	resizer.resizeImage(pixels, w, h, 0, resized_pixels.data(), new_w, new_h, 4, 0);
+	stbi_image_free(pixels);
 
 	sf::Texture tex;
 	if (!tex.create(sf::Vector2u(new_w, new_h)))
@@ -169,25 +170,13 @@ class ImageViewerApp
 			}
 		}
 
-		void preload_texture_async(int image_index, float scale)
+		LazyLoad<sf::Texture>& get_async_texture(int image_index, float scale)
 		{
-			if (loaded_textures.contains({image_index, scale}))
-				return;
-
-			loaded_textures.emplace(std::pair{image_index, scale},
+			auto[it, inserted] = loaded_textures.try_emplace(std::pair{image_index, scale},
 					[image_path = images[image_index], scale]
 					{ return load_texture(image_path, scale); });
-		}
 
-		const sf::Texture& get_texture(int image_index, float scale)
-		{
-			if (auto it = loaded_textures.find({image_index, scale}); it != loaded_textures.end())
-				return it->second.get();
-
-			auto[it, inserted] = loaded_textures.emplace(std::pair{image_index, scale},
-					[image_path = images[image_index], scale]
-					{ return load_texture(image_path, scale); });
-			return it->second.get();
+			return it->second;
 		}
 
 		std::pair<int, int> get_texture_pageside(int image_index)
@@ -239,7 +228,8 @@ class ImageViewerApp
 					const auto& tag_indices = tags_indices[curr_tag];
 					int relative_index = std::find(tag_indices.begin(), tag_indices.end(), curr_image_index) - tag_indices.begin();
 
-					std::string title = std::to_string(curr_tag) + " - " + images[curr_image_index] + " [" + std::to_string(relative_index + 1) + "/" + std::to_string(tag_indices.size()) + "]";
+					std::string base_filename = images[curr_image_index].substr(images[curr_image_index].find_last_of("/\\") + 1);
+					std::string title = std::to_string(curr_tag) + " - " + base_filename + " [" + std::to_string(relative_index + 1) + "/" + std::to_string(tag_indices.size()) + "]";
 					window.setTitle(s2ws(title));
 				}
 			}
@@ -289,7 +279,6 @@ class ImageViewerApp
 				bool change_paging = false;
 				for (int i = 0; i < (int)tag_indices.size(); ++i)
 				{
-					//printf("index:%d\n", i);
 					if (!lone_page[i] && check_status != 1 &&
 							(i == 0 || lone_page[i - 1]))
 						check_status = 2;
@@ -314,7 +303,6 @@ class ImageViewerApp
 						if (i < 30 || (i < 60 && std::abs(start0 - start1) < 5))
 						{
 							auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
-							//printf("right:%d left:%d\n", is_right, is_left);
 
 							if (is_right)
 							{
@@ -348,8 +336,6 @@ class ImageViewerApp
 
 							check_status = 0;
 						}
-
-						//printf("%d %d\n", start0, start1);
 					}
 				}
 
@@ -442,7 +428,7 @@ class ImageViewerApp
 		//returns size of drawn sprite
 		sf::Vector2i draw_image(int image_index, float scale, sf::Vector2i pos)
 		{
-			sf::Sprite sprite(get_texture(image_index, scale));
+			sf::Sprite sprite(get_async_texture(image_index, scale).get());
 			sprite.setPosition(sf::Vector2f(pos));
 			window.draw(sprite);
 
@@ -456,9 +442,11 @@ class ImageViewerApp
 
 			int index = curr_pages[curr_page_index].size() - 1;
 			int pos_x = 0;
-			for (auto image_index : curr_pages[curr_page_index] | std::views::reverse)
+
+			const auto& page = curr_pages[curr_page_index];
+			for (auto it = page.rbegin(); it != page.rend(); ++it)
 			{
-				sf::Vector2i drawn_size = draw_image(image_index, scales[index], center_offset + sf::Vector2i(pos_x, 0));
+				sf::Vector2i drawn_size = draw_image(*it, scales[index], center_offset + sf::Vector2i(pos_x, 0));
 				pos_x += drawn_size.x;
 				index--;
 			}
@@ -502,8 +490,8 @@ class ImageViewerApp
 				n_drawn_pages = render_vertical();
 
 			std::vector<std::pair<int, float>> used_textures;
-			std::array preload_offsets{-1, 0, n_drawn_pages};
-			for (auto offset : preload_offsets)
+
+			for (int offset = -1; offset <= n_drawn_pages; offset++)
 			{
 				auto[preload_tag, preload_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
 				if (hit_border)
@@ -514,7 +502,7 @@ class ImageViewerApp
 				int index = 0;
 				for (int image_index : preload_page)
 				{
-					preload_texture_async(image_index, scales[index]);
+					get_async_texture(image_index, scales[index]);
 					used_textures.emplace_back(image_index, scales[index]);
 					index++;
 				}
@@ -673,7 +661,7 @@ class ImageViewerApp
 
 		void run_command(std::string_view cmd)
 		{
-			std::string_view action(cmd.begin(), cmd.begin() + cmd.find('('));
+			std::string_view action(cmd.begin(), cmd.find('('));
 
 			std::vector<std::string> args;
 			auto arg_begin = cmd.begin() + action.length() + 1;
@@ -853,6 +841,11 @@ class ImageViewerApp
 
 					for (const auto&[tag, pages] : pages)
 						update_paging(tag);
+
+					if (mode == ViewMode::Manga || mode == ViewMode::Single)
+						window.setFramerateLimit(20);
+					else if (mode == ViewMode::Vertical)
+						window.setFramerateLimit(60);
 				}
 			}
 			else if (action == "quit")
@@ -880,7 +873,8 @@ class ImageViewerApp
 			//window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
 			window.create(sf::VideoMode(sf::Vector2u(800, 600)), "image viewer", sf::Style::Default);
 			window.setKeyRepeatEnabled(false);
-			window.setVerticalSyncEnabled(true);
+			window.setFramerateLimit(20);
+			//window.setVerticalSyncEnabled(true);
 
 			if (!config_path.empty())
 				load_config(config_path);
@@ -895,29 +889,21 @@ class ImageViewerApp
 		void run()
 		{
 			sf::Clock clock;
-			//long long i = 0;
 			while (window.isOpen())
 			{
 				float dt = clock.restart().asSeconds();
-				//std::cerr << "1 " << i << std::endl;
 				check_stdin();
-				//std::cerr << "2 " << i << std::endl;
 				poll_events();
-				//std::cerr << "3 " << i << std::endl;
 				handle_keyboard(dt);
-				//std::cerr << "4 " << i << std::endl;
 
 				update_status();
-				//std::cerr << "5 " << i << std::endl;
 
 				window.clear();
 				render();
 				window.display();
-				//std::cerr << "6 " << i << std::endl;
 
 				page_changed = false;
 				update_title = false;
-				//i++;
 			}
 		}
 };
