@@ -11,7 +11,6 @@
 #include <map>
 #include <optional>
 #include <ranges>
-#include <regex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -719,7 +718,13 @@ class ImageViewerApp
 
 				if (next_sep_iter - arg_begin > 0)
 				{
-					args.emplace_back(arg_begin, next_sep_iter);
+					std::string_view arg(arg_begin, next_sep_iter);
+
+					uint start_index = arg.find_first_not_of(' ');
+					uint end_index = arg.find_last_not_of(' ') + 1;
+					arg = arg.substr(start_index, end_index - start_index);
+
+					args.emplace_back(arg);
 					int counter = 0;
 					for (auto i : backslash_indices)
 					{
@@ -739,14 +744,10 @@ class ImageViewerApp
 					tag = std::stoi(args[0]);
 					args.erase(args.begin());
 				}
-				for (const auto& arg : args)
+				for (const auto& image_path : args)
 				{
-					auto image_path = std::regex_replace(arg, std::regex("^ +| +$"), "$1");
-					if (image_path.empty())
-						continue;
-
 					int w, h;
-					if (stbi_info(image_path.data(), &w, &h, nullptr) == 0)
+					if (stbi_info(image_path.c_str(), &w, &h, nullptr) == 0)
 					{
 						std::cerr << "error loading " << image_path << '\n';
 						continue;
