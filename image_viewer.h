@@ -1,16 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <cmath>
-#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <future>
 #include <iostream>
 #include <map>
-#include <optional>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -64,7 +61,7 @@ class LazyLoad : LazyLoadBase
 			return resource;
 		}
 
-		bool ready() const
+		bool available() const
 		{
 			if (!loading_resource.valid())
 				return true;
@@ -308,7 +305,7 @@ class ImageViewerApp
 						if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
 							change_paging = !change_paging;
 
-						if (texture_pageside[tag_indices[i]].ready())
+						if (texture_pageside[tag_indices[i]].available())
 						{
 							auto [is_right, is_left] = texture_pageside[tag_indices[i]].get();
 
@@ -390,34 +387,18 @@ class ImageViewerApp
 
 			if (mode == ViewMode::Manga || mode == ViewMode::Single)
 			{
-				sf::Vector2i drawn_area(0, 0);
-				int index = 0;
-				for (const auto& image_index : page)
+				sf::Vector2f drawn_size(0.f, (float)window.getSize().y);
+				for (uint i = 0; i < page.size(); ++i)
 				{
-					sf::Vector2f image_size = textures_sizes[image_index];
-
-					if (drawn_area.y != 0 && image_size.y != drawn_area.y)
-					{
-						scales[index] = drawn_area.y / image_size.y;
-						image_size.x *= scales[index];
-						image_size.y = drawn_area.y;
-					}
-
-					drawn_area.x += image_size.x;
-					drawn_area.y = std::max(drawn_area.y, (int)image_size.y);
-
-					index++;
+					scales[i] = (float)window.getSize().y / textures_sizes[page[i]].y;
+					drawn_size.x += textures_sizes[page[i]].x * scales[i];
 				}
+				float scale_x = std::min(1.f, window.getSize().x / drawn_size.x);
+				drawn_size *= scale_x;
+				for (auto& scale : scales)
+					scale *= scale_x;
 
-				float scale_x = (float)window.getSize().x / drawn_area.x;
-				float scale_y = (float)window.getSize().y / drawn_area.y;
-
-				float global_scale = std::min(scale_x, scale_y);
-				center_offset.x = (window.getSize().x - drawn_area.x * global_scale) / 2.f;
-				center_offset.y = (window.getSize().y - drawn_area.y * global_scale) / 2.f;
-
-				for (auto& scale_fac : scales)
-					scale_fac *= global_scale;
+				center_offset = (sf::Vector2i(window.getSize()) - sf::Vector2i(drawn_size)) / 2;
 			}
 			else
 			{
@@ -444,7 +425,7 @@ class ImageViewerApp
 				else
 					it = loaded_textures.emplace(key, [image_path = images[image_index], scale] { return load_texture(image_path, scale); }).first;
 			}
-			else if (!it->second.ready() && async == false)
+			else if (!it->second.available() && async == false)
 			{
 				// IF AN IMAGE IS REQUESTED SYNC AND IT IS LOADING IN THE THREAD POOL, DISCARD
 				// IT AND LOAD IN MAIN THREAD
@@ -676,6 +657,9 @@ class ImageViewerApp
 						run_command(it->second);
 				}
 			}
+			
+			if (mode != ViewMode::Manga)
+				return;
 			for (auto it = n_pageside_available.begin(), next_it = it; it != n_pageside_available.cend(); it = next_it)
 			{
 				++next_it;
