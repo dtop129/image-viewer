@@ -37,7 +37,7 @@ class LazyLoadBase
 		static BS::thread_pool pool;
 };
 
-BS::thread_pool LazyLoadBase::pool(1);
+BS::thread_pool LazyLoadBase::pool;
 
 template<class T>
 class LazyLoad : LazyLoadBase
@@ -65,23 +65,33 @@ class LazyLoad : LazyLoadBase
 sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 {
 	int h, w, c;
-	unsigned char* pixels = stbi_load(image_path.c_str(), &w, &h, &c, 4);
+	unsigned char* pixels = stbi_load(image_path.c_str(), &w, &h, &c, 3);
 	if (pixels == nullptr)
 		return sf::Texture();
 
 	int new_h = h * scale;
 	int new_w = w * scale;
-	std::vector<unsigned char> resized_pixels(new_w * new_h * 4);
+	std::vector<unsigned char> resized_pixels(new_w * new_h * 3);
 
-	static avir::CImageResizer<> resizer(8);
-	resizer.resizeImage(pixels, w, h, 0, resized_pixels.data(), new_w, new_h, 4, 0);
+	avir::CImageResizer<> resizer(8);
+	resizer.resizeImage(pixels, w, h, 0, resized_pixels.data(), new_w, new_h, 3, 0);
 	stbi_image_free(pixels);
+
+	std::vector<unsigned char> rgba_pixels;
+	rgba_pixels.reserve(new_w * new_h * 4);
+	for (int i = 0; i < new_w * new_h * 3; i += 3)
+	{
+		rgba_pixels.push_back(resized_pixels[i]);
+		rgba_pixels.push_back(resized_pixels[i+1]);
+		rgba_pixels.push_back(resized_pixels[i+2]);
+		rgba_pixels.push_back(255);
+	}
 
 	sf::Texture tex;
 	if (!tex.create(sf::Vector2u(new_w, new_h)))
 		return sf::Texture();
 
-	tex.update(resized_pixels.data());
+	tex.update(rgba_pixels.data());
 	return tex;
 }
 
