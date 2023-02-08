@@ -666,7 +666,7 @@ class ImageViewerApp
 
 				int tag = it->first;
 				auto&[total, prev_total] = it->second;
-				if (total - prev_total > 20 || total == tags_indices[tag].size())
+				if (total != prev_total || total == tags_indices[tag].size())
 				{
 					update_paging(tag);
 					prev_total = total;
@@ -898,7 +898,7 @@ class ImageViewerApp
 		{
 			//window.create(sf::VideoMode(800, 600), "image viewer", sf::Style::Default);
 			window.create(sf::VideoMode(sf::Vector2u(800, 600)), "image viewer", sf::Style::Default);
-			window.setKeyRepeatEnabled(false);
+			//window.setKeyRepeatEnabled(false);
 			window.setFramerateLimit(20);
 			//window.setVerticalSyncEnabled(true);
 
