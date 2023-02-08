@@ -444,6 +444,13 @@ class ImageViewerApp
 				else
 					it = loaded_textures.emplace(key, [image_path = images[image_index], scale] { return load_texture(image_path, scale); }).first;
 			}
+			else if (!it->second.ready() && async == false)
+			{
+				// IF AN IMAGE IS REQUESTED SYNC AND IT IS LOADING IN THE THREAD POOL, DISCARD
+				// IT AND LOAD IN MAIN THREAD
+				loaded_textures.erase(it);
+				it = loaded_textures.emplace(key, load_texture(images[image_index], scale)).first;
+			}
 
 			return it->second;
 		}
