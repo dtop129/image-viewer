@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -8,6 +9,7 @@
 #include <future>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <ranges>
 #include <regex>
 #include <string>
@@ -37,7 +39,7 @@ class LazyLoadBase
 		static BS::thread_pool pool;
 };
 
-BS::thread_pool LazyLoadBase::pool;
+BS::thread_pool LazyLoadBase::pool(std::thread::hardware_concurrency() - 1);
 
 template<class T>
 class LazyLoad : LazyLoadBase
@@ -53,12 +55,22 @@ class LazyLoad : LazyLoadBase
 			loading_resource = pool.submit(f);
 		}
 
+		LazyLoad(const T& value) : resource(value) {}
+
 		const T& get()
 		{
 			if (loading_resource.valid())
 				resource = loading_resource.get();
 
 			return resource;
+		}
+
+		bool ready() const
+		{
+			if (!loading_resource.valid())
+				return true;
+
+			return loading_resource.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
 		}
 };
 
@@ -95,6 +107,37 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 	return tex;
 }
 
+std::pair<int, int> get_texture_pageside(const std::string& image)
+{
+	std::pair<int, int> page_side;
+
+	int w, h, c;
+	unsigned char* pixels = stbi_load(image.c_str(), &w, &h, &c, 3);
+	if (pixels == nullptr)
+		return page_side;
+
+	unsigned int color_left = 0, color_right = 0;
+	for (int y = 0; y < h; y++)
+	{
+		for (int x = 0; x < 3; x++)
+		{
+			unsigned char* pixel = pixels + (x + w * y) * 3;
+			color_left += pixel[0] + pixel[1] + pixel[2];
+		}
+		for (int x = w - 1; x >= w - 3; x--)
+		{
+			unsigned char* pixel = pixels + (x + w * y) * 3;
+			color_right += pixel[0] + pixel[1] + pixel[2];
+		}
+	}
+	color_left = color_left / (3 * h * 3);
+	color_right = color_right / (3 * h * 3);
+	stbi_image_free(pixels);
+
+	page_side = {color_left > 250 || color_left < 5, color_right > 250 || color_right < 5};
+	return page_side;
+}
+
 
 enum class ViewMode { Manga, Vertical, Single };
 
@@ -106,8 +149,11 @@ class ImageViewerApp
 		ViewMode mode = ViewMode::Manga;
 		std::vector<std::string> images;
 
+		std::vector<sf::Vector2f> textures_sizes;
+		std::map<int, std::pair<std::atomic<uint>, uint>> n_pageside_available;
+		std::vector<LazyLoad<std::pair<int, int>>> texture_pageside;
+
 		std::map<std::pair<int, float>, LazyLoad<sf::Texture>> loaded_textures;
-		std::vector<LazyLoad<sf::Vector2f>> texture_sizes;
 
 		std::map<int, std::vector<int>> tags_indices;
 		std::map<int, std::vector<std::vector<int>>> pages;
@@ -180,53 +226,6 @@ class ImageViewerApp
 			}
 		}
 
-		LazyLoad<sf::Texture>& get_async_texture(int image_index, float scale)
-		{
-			auto[it, inserted] = loaded_textures.try_emplace(std::pair{image_index, scale},
-					[image_path = images[image_index], scale]
-					{ return load_texture(image_path, scale); });
-
-			return it->second;
-		}
-
-		std::pair<int, int> get_texture_pageside(int image_index)
-		{
-			auto it = pages_side.find(image_index);
-			if (it != pages_side.end())
-				return it->second;
-
-			int w, h, c;
-			unsigned char* pixels = stbi_load(images[image_index].c_str(), &w, &h, &c, 3);
-			if (pixels == nullptr)
-			{
-				pages_side[image_index] = {0, 0};
-				return {0, 0};
-			}
-
-			unsigned int color_left = 0, color_right = 0;
-			for (int y = 0; y < h; y++)
-			{
-				for (int x = 0; x < 3; x++)
-				{
-					unsigned char* pixel = pixels + (x + w * y) * 3;
-					color_left += pixel[0] + pixel[1] + pixel[2];
-				}
-				for (int x = w - 1; x >= w - 3; x--)
-				{
-					unsigned char* pixel = pixels + (x + w * y) * 3;
-					color_right += pixel[0] + pixel[1] + pixel[2];
-				}
-			}
-			color_left = color_left / (3 * h) / 3;
-			color_right = color_right / (3 * h) / 3;
-			stbi_image_free(pixels);
-
-			std::pair<int, int> page_side = {color_left > 245 || color_left < 10, color_right > 245 || color_right < 10};
-
-			pages_side[image_index] = page_side;
-			return page_side;
-		}
-
 		void update_status()
 		{
 			if (update_title || page_changed)
@@ -272,7 +271,7 @@ class ImageViewerApp
 				std::vector<int> lone_page(tag_indices.size(), 0);
 				for (int i = 0; i < (int)tag_indices.size(); ++i)
 				{
-					const auto& image_size = texture_sizes[tag_indices[i]].get();
+					const auto& image_size = textures_sizes[tag_indices[i]];
 					if (image_size.x > image_size.y * 0.8)
 						lone_page[i] = 1;
 				}
@@ -310,9 +309,9 @@ class ImageViewerApp
 						if (std::find(tag_repage_indices.begin(), tag_repage_indices.end(), tag_indices[i]) != tag_repage_indices.end())
 							change_paging = !change_paging;
 
-						if (i < 30 || (i < 60 && std::abs(start0 - start1) < 5))
+						if (texture_pageside[tag_indices[i]].ready())
 						{
-							auto[is_right, is_left] = get_texture_pageside(tag_indices[i]);
+							auto [is_right, is_left] = texture_pageside[tag_indices[i]].get();
 
 							if (is_right)
 							{
@@ -396,7 +395,7 @@ class ImageViewerApp
 				int index = 0;
 				for (const auto& image_index : page)
 				{
-					sf::Vector2f image_size = texture_sizes[image_index].get();
+					sf::Vector2f image_size = textures_sizes[image_index];
 
 					if (drawn_area.y != 0 && image_size.y != drawn_area.y)
 					{
@@ -424,7 +423,7 @@ class ImageViewerApp
 			else
 			{
 				int image_index = page[0];
-				int width = texture_sizes[image_index].get().x;
+				int width = textures_sizes[image_index].x;
 
 				float scale = std::min(700.f, 0.8f * window.getSize().x) / width;
 				center_offset.x = (window.getSize().x - width * scale) / 2.f;
@@ -435,10 +434,25 @@ class ImageViewerApp
 			return {scales, center_offset};
 		}
 
+		LazyLoad<sf::Texture>& get_texture(int image_index, float scale, bool async = false)
+		{
+			std::pair key{image_index, scale};
+			auto it = loaded_textures.find(key);
+			if (it == loaded_textures.end())
+			{
+				if (async == false)
+					it = loaded_textures.emplace(key, load_texture(images[image_index], scale)).first;
+				else
+					it = loaded_textures.emplace(key, [image_path = images[image_index], scale] { return load_texture(image_path, scale); }).first;
+			}
+
+			return it->second;
+		}
+
 		//returns size of drawn sprite
 		sf::Vector2i draw_image(int image_index, float scale, sf::Vector2i pos)
 		{
-			sf::Sprite sprite(get_async_texture(image_index, scale).get());
+			sf::Sprite sprite(get_texture(image_index, scale).get());
 			sprite.setPosition(sf::Vector2f(pos));
 			window.draw(sprite);
 
@@ -501,6 +515,7 @@ class ImageViewerApp
 
 			std::vector<std::pair<int, float>> used_textures;
 
+			//for (int offset = 0; offset < n_drawn_pages; offset++) //WITHOUT PRELOADING, MOSTLY FOR DEBUGGING PURPOSES
 			for (int offset = -1; offset <= n_drawn_pages; offset++)
 			{
 				auto[preload_tag, preload_page_index, hit_border] = advance_page(curr_tag, curr_page_index, offset);
@@ -512,7 +527,7 @@ class ImageViewerApp
 				int index = 0;
 				for (int image_index : preload_page)
 				{
-					get_async_texture(image_index, scales[index]);
+					get_texture(image_index, scales[index], true);
 					used_textures.emplace_back(image_index, scales[index]);
 					index++;
 				}
@@ -585,7 +600,7 @@ class ImageViewerApp
 			auto[scales, center_offset] = get_scale_centering(curr_page);
 
 			vertical_offset += offset;
-			float curr_tex_height = texture_sizes[curr_page[0]].get().y;
+			float curr_tex_height = textures_sizes[curr_page[0]].y;
 
 			bool hit_border;
 			while (vertical_offset >= curr_tex_height * scales[0] || vertical_offset < 0)
@@ -609,14 +624,14 @@ class ImageViewerApp
 						break;
 					}
 
-					curr_tex_height = texture_sizes[pages[curr_tag][curr_page_index][0]].get().y;
+					curr_tex_height = textures_sizes[pages[curr_tag][curr_page_index][0]].y;
 					auto[scales, center_offset] = get_scale_centering(pages[curr_tag][curr_page_index]);
 					vertical_offset += curr_tex_height * scales[0];
 				}
 
 				curr_page = pages[curr_tag][curr_page_index];
 				std::tie(scales, center_offset) = get_scale_centering(curr_page);
-				curr_tex_height = texture_sizes[curr_page[0]].get().y;
+				curr_tex_height = textures_sizes[curr_page[0]].y;
 			}
 
 			if (old_tag != curr_tag || old_page_index != curr_page_index)
@@ -653,6 +668,20 @@ class ImageViewerApp
 				{
 					if (auto it = mouse_bindings.find((int)event.mouseButton.button); it != mouse_bindings.end())
 						run_command(it->second);
+				}
+			}
+			for (auto it = n_pageside_available.begin(), next_it = it; it != n_pageside_available.cend(); it = next_it)
+			{
+				++next_it;
+
+				int tag = it->first;
+				auto&[total, prev_total] = it->second;
+				if (total - prev_total > 20 || total == tags_indices[tag].size())
+				{
+					update_paging(tag);
+					prev_total = total;
+					if (total == tags_indices[tag].size())
+						n_pageside_available.erase(it);
 				}
 			}
 		}
@@ -710,16 +739,16 @@ class ImageViewerApp
 					tag = std::stoi(args[0]);
 					args.erase(args.begin());
 				}
-
 				for (const auto& arg : args)
 				{
 					auto image_path = std::regex_replace(arg, std::regex("^ +| +$"), "$1");
 					if (image_path.empty())
 						continue;
 
-					if (!std::filesystem::exists(image_path))
+					int w, h;
+					if (stbi_info(image_path.data(), &w, &h, nullptr) == 0)
 					{
-						std::cerr << image_path <<  " not found\n";
+						std::cerr << "error loading " << image_path << '\n';
 						continue;
 					}
 
@@ -729,17 +758,14 @@ class ImageViewerApp
 					if (image_it == images.end())
 					{
 						images.push_back(image_path);
-						texture_sizes.emplace_back([image_path]
-							{
-								int w, h, c;
-								int ok = stbi_info(image_path.c_str(), &w, &h, &c);
-								if (ok == 0)
-								{
-									std::cerr << "error loading " << image_path << '\n';
-									return sf::Vector2f(0.f, 0.f);
-								}
+						textures_sizes.emplace_back(w, h);
 
-								return sf::Vector2f(w, h);
+						auto [it, inserted] = n_pageside_available.try_emplace(tag);
+						texture_pageside.emplace_back([&counter = it->second.first, image_path] 
+							{ 
+								auto pageside = get_texture_pageside(image_path);
+								counter++;
+								return pageside; 
 							});
 					}
 
@@ -758,9 +784,7 @@ class ImageViewerApp
 
 					update_title = true;
 				}
-
-				if (!args.empty())
-					update_paging(tag);
+				update_paging(tag);
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
@@ -902,6 +926,7 @@ class ImageViewerApp
 			while (window.isOpen())
 			{
 				float dt = clock.restart().asSeconds();
+
 				check_stdin();
 				poll_events();
 				handle_keyboard(dt);
@@ -914,6 +939,8 @@ class ImageViewerApp
 
 				page_changed = false;
 				update_title = false;
+
+				//std::cout << 1 / dt << std::endl;
 			}
 		}
 };
