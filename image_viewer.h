@@ -892,7 +892,7 @@ class ImageViewerApp
 
 		void check_stdin()
 		{
-			if (std::cin.rdbuf()->in_avail())
+			while (std::cin.rdbuf()->in_avail())
 			{
 				std::string cmd;
 				std::getline(std::cin, cmd);
