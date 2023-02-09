@@ -73,19 +73,19 @@ class LazyLoad : LazyLoadBase
 sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 {
 	int h, w, c;
-	unsigned char* pixels = stbi_load(image_path.c_str(), &w, &h, &c, 3);
+	uint8_t* pixels = stbi_load(image_path.c_str(), &w, &h, &c, 3);
 	if (pixels == nullptr)
 		return sf::Texture();
 
 	int new_h = h * scale;
 	int new_w = w * scale;
-	std::vector<unsigned char> resized_pixels(new_w * new_h * 3);
+	std::vector<uint8_t> resized_pixels(new_w * new_h * 3);
 
 	avir::CLancIR resizer;
 	resizer.resizeImage(pixels, w, h, 0, resized_pixels.data(), new_w, new_h, 0, 3);
 	stbi_image_free(pixels);
 
-	std::vector<unsigned char> rgba_pixels;
+	std::vector<uint8_t> rgba_pixels;
 	rgba_pixels.reserve(new_w * new_h * 4);
 	for (int i = 0; i < new_w * new_h * 3; i += 3)
 	{
@@ -108,7 +108,7 @@ std::pair<int, int> get_texture_pageside(const std::string& image)
 	std::pair<int, int> page_side;
 
 	int w, h, c;
-	unsigned char* pixels = stbi_load(image.c_str(), &w, &h, &c, 3);
+	uint8_t* pixels = stbi_load(image.c_str(), &w, &h, &c, 3);
 	if (pixels == nullptr)
 		return page_side;
 
@@ -117,12 +117,12 @@ std::pair<int, int> get_texture_pageside(const std::string& image)
 	{
 		for (int x = 0; x < 3; x++)
 		{
-			unsigned char* pixel = pixels + (x + w * y) * 3;
+			uint8_t* pixel = pixels + (x + w * y) * 3;
 			color_left += pixel[0] + pixel[1] + pixel[2];
 		}
 		for (int x = w - 1; x >= w - 3; x--)
 		{
-			unsigned char* pixel = pixels + (x + w * y) * 3;
+			uint8_t* pixel = pixels + (x + w * y) * 3;
 			color_right += pixel[0] + pixel[1] + pixel[2];
 		}
 	}
@@ -146,7 +146,7 @@ class ImageViewerApp
 		std::vector<std::string> images;
 
 		std::vector<sf::Vector2f> textures_sizes;
-		std::map<int, std::pair<std::atomic<uint>, uint>> n_pageside_available;
+		std::map<int, std::pair<std::atomic<unsigned int>, unsigned int>> n_pageside_available;
 		std::vector<LazyLoad<std::pair<int, int>>> texture_pageside;
 
 		std::map<std::pair<int, float>, LazyLoad<sf::Texture>> loaded_textures;
@@ -388,7 +388,7 @@ class ImageViewerApp
 			if (mode == ViewMode::Manga || mode == ViewMode::Single)
 			{
 				sf::Vector2f drawn_size(0.f, (float)window.getSize().y);
-				for (uint i = 0; i < page.size(); ++i)
+				for (unsigned int i = 0; i < page.size(); ++i)
 				{
 					scales[i] = (float)window.getSize().y / textures_sizes[page[i]].y;
 					drawn_size.x += textures_sizes[page[i]].x * scales[i];
@@ -696,7 +696,7 @@ class ImageViewerApp
 			auto arg_begin = cmd.begin() + action.length() + 1;
 			while (arg_begin != cmd.end())
 			{
-				std::vector<uint> backslash_indices;
+				std::vector<unsigned int> backslash_indices;
 				auto next_sep_iter = std::find(arg_begin, cmd.end(), ',');
 				while (*(next_sep_iter - 1) == '\\' && next_sep_iter != cmd.end())
 				{
@@ -711,8 +711,8 @@ class ImageViewerApp
 				{
 					std::string_view arg(arg_begin, next_sep_iter);
 
-					uint start_index = arg.find_first_not_of(' ');
-					uint end_index = arg.find_last_not_of(' ') + 1;
+					unsigned int start_index = arg.find_first_not_of(' ');
+					unsigned int end_index = arg.find_last_not_of(' ') + 1;
 					arg = arg.substr(start_index, end_index - start_index);
 
 					args.emplace_back(arg);
