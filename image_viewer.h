@@ -16,7 +16,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-#include "avir.h"
+#include "lancir.h"
 
 #include "BS_thread_pool.hpp"
 
@@ -81,8 +81,8 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 	int new_w = w * scale;
 	std::vector<unsigned char> resized_pixels(new_w * new_h * 3);
 
-	avir::CImageResizer<> resizer(8);
-	resizer.resizeImage(pixels, w, h, 0, resized_pixels.data(), new_w, new_h, 3, 0);
+	avir::CLancIR resizer;
+	resizer.resizeImage(pixels, w, h, 0, resized_pixels.data(), new_w, new_h, 0, 3);
 	stbi_image_free(pixels);
 
 	std::vector<unsigned char> rgba_pixels;
