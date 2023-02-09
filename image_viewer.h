@@ -871,7 +871,7 @@ class ImageViewerApp
 					if (mode == ViewMode::Manga || mode == ViewMode::Single)
 						window.setFramerateLimit(20);
 					else if (mode == ViewMode::Vertical)
-						window.setFramerateLimit(60);
+						window.setFramerateLimit(0);
 				}
 			}
 			else if (action == "quit")
@@ -900,7 +900,7 @@ class ImageViewerApp
 			window.create(sf::VideoMode(sf::Vector2u(800, 600)), "image viewer", sf::Style::Default);
 			//window.setKeyRepeatEnabled(false);
 			window.setFramerateLimit(20);
-			//window.setVerticalSyncEnabled(true);
+			window.setVerticalSyncEnabled(true);
 
 			if (!config_path.empty())
 				load_config(config_path);
