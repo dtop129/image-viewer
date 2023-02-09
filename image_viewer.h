@@ -905,8 +905,7 @@ class ImageViewerApp
 			if (!config_path.empty())
 				load_config(config_path);
 
-			std::cout.sync_with_stdio(false);
-			std::cin.sync_with_stdio(false);
+			std::ios_base::sync_with_stdio(false);
 			std::cin.tie(NULL);
 
 			std::cout << "current_mode=manga" << std::endl;
