@@ -70,15 +70,21 @@ class LazyLoad : LazyLoadBase
 		}
 };
 
-sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
+struct TextureData
+{
+	std::vector<uint8_t> pixels;
+	sf::Vector2u size;
+};
+
+TextureData load_texture(const std::string& image_path, float scale = 1.f)
 {
 	int h, w, c;
 	uint8_t* pixels = stbi_load(image_path.c_str(), &w, &h, &c, 3);
 	if (pixels == nullptr)
-		return sf::Texture();
+		return TextureData();
 
-	int new_h = h * scale;
-	int new_w = w * scale;
+	unsigned int new_h = h * scale;
+	unsigned int new_w = w * scale;
 	std::vector<uint8_t> resized_pixels(new_w * new_h * 3);
 
 	avir::CLancIR resizer;
@@ -87,7 +93,7 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 
 	std::vector<uint8_t> rgba_pixels;
 	rgba_pixels.reserve(new_w * new_h * 4);
-	for (int i = 0; i < new_w * new_h * 3; i += 3)
+	for (unsigned int i = 0; i < new_w * new_h * 3; i += 3)
 	{
 		rgba_pixels.push_back(resized_pixels[i]);
 		rgba_pixels.push_back(resized_pixels[i+1]);
@@ -97,10 +103,10 @@ sf::Texture load_texture(const std::string& image_path, float scale = 1.f)
 
 	sf::Texture tex;
 	if (!tex.create(sf::Vector2u(new_w, new_h)))
-		return sf::Texture();
+		return TextureData();
 
 	tex.update(rgba_pixels.data());
-	return tex;
+	return {rgba_pixels, {new_w, new_h}};
 }
 
 std::pair<int, int> get_texture_pageside(const std::string& image)
@@ -149,7 +155,8 @@ class ImageViewerApp
 		std::map<int, std::pair<std::atomic<unsigned int>, unsigned int>> n_pageside_available;
 		std::vector<LazyLoad<std::pair<int, int>>> texture_pageside;
 
-		std::map<std::pair<int, float>, LazyLoad<sf::Texture>> loaded_textures;
+		std::map<std::pair<int, float>, sf::Texture> loaded_textures;
+		std::map<std::pair<int, float>, LazyLoad<TextureData>> loading_textures;
 
 		std::map<int, std::vector<int>> tags_indices;
 		std::map<int, std::vector<std::vector<int>>> pages;
@@ -414,32 +421,47 @@ class ImageViewerApp
 			return {scales, center_offset};
 		}
 
-		LazyLoad<sf::Texture>& get_texture(int image_index, float scale, bool async = false)
+		void prepare_texture(int image_index, float scale)
+		{
+			std::pair key{image_index, scale};
+			if (loaded_textures.contains(key) || loading_textures.contains(key))
+				return;
+
+			loading_textures.try_emplace(key, [image_path = images[image_index], scale]
+				{
+					return load_texture(image_path, scale);
+				});
+		}
+
+		const sf::Texture& get_texture(int image_index, float scale)
 		{
 			std::pair key{image_index, scale};
 			auto it = loaded_textures.find(key);
 			if (it == loaded_textures.end())
 			{
-				if (async == false)
-					it = loaded_textures.emplace(key, load_texture(images[image_index], scale)).first;
+				auto loading_it = loading_textures.find(key);
+				bool tex_available = loading_it != loading_textures.end() && loading_it->second.available();
+				TextureData tex_data;
+				if (tex_available)
+					tex_data = loading_it->second.get();
 				else
-					it = loaded_textures.emplace(key, [image_path = images[image_index], scale] { return load_texture(image_path, scale); }).first;
-			}
-			else if (!it->second.available() && async == false)
-			{
-				// IF AN IMAGE IS REQUESTED SYNC AND IT IS LOADING IN THE THREAD POOL, DISCARD
-				// IT AND LOAD IN MAIN THREAD
-				loaded_textures.erase(it);
-				it = loaded_textures.emplace(key, load_texture(images[image_index], scale)).first;
-			}
+					tex_data = load_texture(images[image_index], scale);
 
+				it = loaded_textures.try_emplace(key).first;
+				sf::Texture& tex = it->second;
+				if (tex.create(tex_data.size))
+					tex.update(tex_data.pixels.data());
+
+				if (loading_it != loading_textures.end())
+					loading_textures.erase(key);
+			}
 			return it->second;
 		}
 
 		//returns size of drawn sprite
 		sf::Vector2i draw_image(int image_index, float scale, sf::Vector2i pos)
 		{
-			sf::Sprite sprite(get_texture(image_index, scale).get());
+			sf::Sprite sprite(get_texture(image_index, scale));
 			sprite.setPosition(sf::Vector2f(pos));
 			window.draw(sprite);
 
@@ -514,13 +536,18 @@ class ImageViewerApp
 				int index = 0;
 				for (int image_index : preload_page)
 				{
-					get_texture(image_index, scales[index], true);
+					prepare_texture(image_index, scales[index]);
 					used_textures.emplace_back(image_index, scales[index]);
 					index++;
 				}
 			}
 
 			std::erase_if(loaded_textures, [&used_textures](const auto& item)
+				{
+					return std::find(used_textures.begin(), used_textures.end(), item.first)
+						== used_textures.end();
+				});
+			std::erase_if(loading_textures, [&used_textures](const auto& item)
 				{
 					return std::find(used_textures.begin(), used_textures.end(), item.first)
 						== used_textures.end();
