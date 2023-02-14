@@ -18,7 +18,7 @@
 #include "stb_image.h"
 #include "lancir.h"
 
-#include "BS_thread_pool.hpp"
+#include "BS_thread_pool_light.hpp"
 
 
 std::wstring s2ws(const std::string& s) {
@@ -32,10 +32,10 @@ std::wstring s2ws(const std::string& s) {
 class LazyLoadBase
 {
 	protected:
-		static BS::thread_pool pool;
+		static BS::thread_pool_light pool;
 };
 
-BS::thread_pool LazyLoadBase::pool(std::thread::hardware_concurrency() - 1);
+BS::thread_pool_light LazyLoadBase::pool(std::thread::hardware_concurrency() - 1);
 
 template<class T>
 class LazyLoad : LazyLoadBase
@@ -265,7 +265,7 @@ class ImageViewerApp
 				auto& tag_repage_indices = repage_indices[tag];
 
 				std::vector<int> lone_page(tag_indices.size(), 0);
-				for (int i = 0; i < (int)tag_indices.size(); ++i)
+				for (int i = 0; i < (int)tag_indices.size(); i++)
 				{
 					const auto& image_size = textures_sizes[tag_indices[i]];
 					if (image_size.x > image_size.y * 0.8)
@@ -282,7 +282,7 @@ class ImageViewerApp
 				int start0 = 0, start1 = 0;
 				int streak_begin = 0;
 				bool change_paging = false;
-				for (int i = 0; i < (int)tag_indices.size(); ++i)
+				for (int i = 0; i < (int)tag_indices.size(); i++)
 				{
 					if (!lone_page[i] && check_status != 1 &&
 							(i == 0 || lone_page[i - 1]))
@@ -345,7 +345,7 @@ class ImageViewerApp
 				}
 
 				tag_pages.clear();
-				for (int i = 0; i < (int)tag_indices.size(); ++i)
+				for (int i = 0; i < (int)tag_indices.size(); i++)
 				{
 					if (i + 1 == (int)tag_indices.size() || lone_page[i] || lone_page[i + 1])
 					{
@@ -388,7 +388,7 @@ class ImageViewerApp
 			if (mode == ViewMode::Manga || mode == ViewMode::Single)
 			{
 				sf::Vector2f drawn_size(0.f, (float)window.getSize().y);
-				for (unsigned int i = 0; i < page.size(); ++i)
+				for (unsigned int i = 0; i < page.size(); i++)
 				{
 					scales[i] = (float)window.getSize().y / textures_sizes[page[i]].y;
 					drawn_size.x += textures_sizes[page[i]].x * scales[i];
@@ -720,7 +720,7 @@ class ImageViewerApp
 					for (auto i : backslash_indices)
 					{
 						args.back().erase(i - counter, 1);
-						counter++;
+						++counter;
 					}
 				}
 
@@ -756,7 +756,7 @@ class ImageViewerApp
 						texture_pageside.emplace_back([&counter = it->second.first, image_path] 
 							{ 
 								auto pageside = get_texture_pageside(image_path);
-								counter++;
+								++counter;
 								return pageside; 
 							});
 					}
