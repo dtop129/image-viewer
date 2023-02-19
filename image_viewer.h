@@ -692,13 +692,21 @@ class ImageViewerApp
 				++next_it;
 
 				int tag = it->first;
-				auto&[total, prev_total] = it->second;
-				if (total != prev_total || total == tags_indices[tag].size())
+				auto tag_it = tags_indices.find(tag);
+				if (tag_it == tags_indices.end())
+					n_pageside_available.erase(it);
+				else
 				{
-					update_paging(tag);
-					prev_total = total;
-					if (total == tags_indices[tag].size())
-						n_pageside_available.erase(it);
+					const auto& tag_indices = tag_it->second;
+					auto&[total, prev_total] = it->second;
+
+					if (total != prev_total || total == tag_indices.size())
+					{
+						update_paging(tag);
+						prev_total = total;
+						if (total == tag_indices.size())
+							n_pageside_available.erase(it);
+					}
 				}
 			}
 		}
