@@ -1,4 +1,4 @@
-CXXFLAGS = -O3 -std=c++20 -Wall -Iinclude
+CXXFLAGS = -march=native -Ofast -std=c++20 -Wall -Iinclude
 LIBS = -lsfml-graphics -lsfml-window -lsfml-system
 
 HEADERS = image_viewer.h
