@@ -101,11 +101,6 @@ TextureData load_texture(const std::string& image_path, float scale = 1.f)
 		rgba_pixels.push_back(255);
 	}
 
-	sf::Texture tex;
-	if (!tex.create(sf::Vector2u(new_w, new_h)))
-		return TextureData();
-
-	tex.update(rgba_pixels.data());
 	return {rgba_pixels, {new_w, new_h}};
 }
 
