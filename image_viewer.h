@@ -22,7 +22,7 @@
 
 
 std::wstring s2ws(const std::string& s) {
-	std::string curLocale = setlocale(LC_ALL, ""); 
+	std::string curLocale = setlocale(LC_ALL, "");
 	std::wstring ws(s.size(), L' '); // Overestimate number of code points.
 	ws.resize(std::mbstowcs(&ws[0], s.c_str(), s.size())); // Shrink to fit.
 	setlocale(LC_ALL, curLocale.c_str());
@@ -609,19 +609,19 @@ class ImageViewerApp
 			auto[scales, center_offset] = get_scale_centering(curr_page);
 
 			vertical_offset += offset;
-			float curr_tex_height = textures_sizes[curr_page[0]].y;
+			float curr_image_height = textures_sizes[curr_page[0]].y * scales[0];
 
 			bool hit_border;
-			while (vertical_offset >= curr_tex_height * scales[0] || vertical_offset < 0)
+			while (vertical_offset >= curr_image_height || vertical_offset < 0)
 			{
-				if (vertical_offset >= curr_tex_height * scales[0])
+				if (vertical_offset >= curr_image_height)
 				{
-					vertical_offset -= curr_tex_height * scales[0];
+					vertical_offset -= curr_image_height;
 
 					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, 1);
 					if (hit_border)
 					{
-						vertical_offset = curr_tex_height * scales[0];
+						vertical_offset = curr_image_height;
 						break;
 					}
 				}
@@ -633,14 +633,14 @@ class ImageViewerApp
 						break;
 					}
 
-					curr_tex_height = textures_sizes[pages[curr_tag][curr_page_index][0]].y;
 					auto[scales, center_offset] = get_scale_centering(pages[curr_tag][curr_page_index]);
-					vertical_offset += curr_tex_height * scales[0];
+					curr_image_height = textures_sizes[pages[curr_tag][curr_page_index][0]].y * scales[0];
+					vertical_offset += curr_image_height;
 				}
 
 				curr_page = pages[curr_tag][curr_page_index];
-				std::tie(scales, center_offset) = get_scale_centering(curr_page);
-				curr_tex_height = textures_sizes[curr_page[0]].y;
+				auto[scales, center_offset] = get_scale_centering(curr_page);
+				curr_image_height = textures_sizes[curr_page[0]].y * scales[0];
 			}
 
 			if (old_tag != curr_tag || old_page_index != curr_page_index)
@@ -679,7 +679,7 @@ class ImageViewerApp
 						run_command(it->second);
 				}
 			}
-			
+
 			if (mode != ViewMode::Manga)
 				return;
 			for (auto it = n_pageside_available.begin(), next_it = it; it != n_pageside_available.cend(); it = next_it)
@@ -783,11 +783,11 @@ class ImageViewerApp
 						textures_sizes.emplace_back(w, h);
 
 						auto [it, inserted] = n_pageside_available.try_emplace(tag);
-						texture_pageside.emplace_back([&counter = it->second.first, image_path] 
-							{ 
+						texture_pageside.emplace_back([&counter = it->second.first, image_path]
+							{
 								auto pageside = get_texture_pageside(image_path);
 								++counter;
-								return pageside; 
+								return pageside;
 							});
 					}
 
