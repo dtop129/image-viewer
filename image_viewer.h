@@ -188,19 +188,16 @@ class ImageViewerApp
 
 				if (binding_name[0] == '<' && binding_name.length() > 1)
 				{
-					std::size_t end_bracket_index = binding_name.find('>');
-					if (end_bracket_index == std::string::npos)
+					int key;
+					if (binding_name == "<space>")
+						key = sf::Keyboard::Space;
+					else if (binding_name == "<backspace>")
+						key = sf::Keyboard::Backspace;
+					else
 					{
 						std::cerr << binding_name << " is an invalid binding\n";
 						continue;
 					}
-
-					binding_name = binding_name.substr(1, end_bracket_index - 1);
-					int key;
-					if (binding_name == "space")
-						key = sf::Keyboard::Space;
-					else if (binding_name == "backspace")
-						key = sf::Keyboard::Backspace;
 
 					keyboard_bindings[key] = command;
 				}
