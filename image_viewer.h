@@ -8,6 +8,7 @@
 #include <future>
 #include <iostream>
 #include <map>
+#include <numeric>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -113,25 +114,39 @@ std::pair<int, int> get_texture_pageside(const std::string& image)
 	if (pixels == nullptr)
 		return page_side;
 
-	unsigned int color_left = 0, color_right = 0;
-	for (int y = 0; y < h; y++)
+	// change to greyscale column major
+	std::vector<unsigned int> pixels_cm;
+	pixels_cm.reserve(w * h * 3);
+	for (int x = 0; x < w; x++)
 	{
-		for (int x = 0; x < 3; x++)
+		for (int y = 0; y < h; y++)
 		{
 			uint8_t* pixel = pixels + (x + w * y) * 3;
-			color_left += pixel[0] + pixel[1] + pixel[2];
-		}
-		for (int x = w - 1; x >= w - 3; x--)
-		{
-			uint8_t* pixel = pixels + (x + w * y) * 3;
-			color_right += pixel[0] + pixel[1] + pixel[2];
+			pixels_cm.push_back((pixel[0] + pixel[1] + pixel[2]) / 3);
 		}
 	}
-	color_left = color_left / (3 * h * 3);
-	color_right = color_right / (3 * h * 3);
 	stbi_image_free(pixels);
 
-	page_side = {color_left > 250 || color_left < 5, color_right > 250 || color_right < 5};
+	unsigned int color_left = 0, color_right = 0;
+	color_left = std::accumulate(pixels_cm.begin(), pixels_cm.begin() + h, 0);
+	color_right = std::accumulate(pixels_cm.end() - h, pixels_cm.end(), 0);
+
+	color_left = color_left / h;
+	color_right = color_right / h;
+
+	unsigned int accum = 0;
+	std::for_each (pixels_cm.begin(), pixels_cm.begin() + h, [&](unsigned int d) {
+		accum += (d - color_left) * (d - color_left);
+	});
+	unsigned int var_left = accum / (h-1);
+
+	accum = 0;
+	std::for_each (pixels_cm.end() - h, pixels_cm.end(), [&](unsigned int d) {
+		accum += (d - color_right) * (d - color_right);
+	});
+	unsigned int var_right = accum / (h-1);
+
+	page_side = {var_left < 50, var_right < 50};
 	return page_side;
 }
 
@@ -679,7 +694,8 @@ class ImageViewerApp
 
 			if (mode != ViewMode::Manga)
 				return;
-			for (auto it = n_pageside_available.begin(), next_it = it; it != n_pageside_available.cend(); it = next_it)
+
+			for (auto it = n_pageside_available.begin(), next_it = it; it != n_pageside_available.end(); it = next_it)
 			{
 				++next_it;
 
