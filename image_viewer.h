@@ -843,6 +843,31 @@ class ImageViewerApp
 				else
 					std::cerr << "tag " << tag << " not present" << std::endl;
 			}
+			else if (action == "goto_tag_relative")
+			{
+				int offset = std::stoi(args[0]);
+				auto tag_pages_it = pages.find(curr_tag);
+
+				if (tag_pages_it != pages.end())
+				{
+					int min_offset = -std::distance(pages.begin(), tag_pages_it);
+					int max_offset = std::distance(tag_pages_it, std::prev(pages.end()));
+					int clamped_offset = std::clamp(offset, min_offset, max_offset);
+
+					if (clamped_offset != 0)
+					{
+						std::advance(tag_pages_it, clamped_offset);
+
+						curr_tag = tag_pages_it->first;
+						curr_page_index = 0;
+						curr_image_index = tag_pages_it->second[0][0];
+
+						page_changed = true;
+					}
+					else
+						std::cout << "last_in_tag_dir=" << offset << std::endl;
+				}
+			}
 			else if (action == "goto_relative")
 			{
 				int offset = std::stoi(args[0]);
@@ -904,9 +929,7 @@ class ImageViewerApp
 			else if (action == "quit")
 				window.close();
 			else
-			{
 				std::cerr << action << " is not a valid command" << std::endl;
-			}
 		}
 
 		void check_stdin()
