@@ -1,10 +1,10 @@
 CXXFLAGS = -march=native -Ofast -std=c++20 -Wall -Iinclude
 LIBS = -lsfml-graphics -lsfml-window -lsfml-system
 
-HEADERS = image_viewer.h
-OBJS = image_viewer.o
+HEADERS = image_viewer.h util.h
+OBJS = image_viewer.o util.o
 
-%.o: %.cpp $(HEADERS)
+%.o: %.cpp makefile
 	g++ -c -o $@ $< $(CXXFLAGS)
 
 image_viewer: $(OBJS)
