@@ -4,11 +4,14 @@ LIBS = -lsfml-graphics -lsfml-window -lsfml-system
 HEADERS = image_viewer.h util.h
 OBJS = image_viewer.o util.o
 
-%.o: %.cpp makefile
+image_viewer.o: image_viewer.cpp image_viewer.h
 	g++ -c -o $@ $< $(CXXFLAGS)
 
-image_viewer: $(OBJS)
-	g++ -o $@ $(OBJS) $(LIBS)
+util.o: util.cpp util.h
+	g++ -c -o $@ $< $(CXXFLAGS)
+
+image_viewer: image_viewer.o util.o
+	g++ -o $@ $^ $(LIBS)
 
 install: image_viewer
 	cp -f image_viewer /usr/local/bin

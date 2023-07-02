@@ -20,15 +20,14 @@
 #include <SFML/Graphics.hpp>
 #include <stb_image.h>
 
-enum class ViewMode { Manga, Vertical, Single };
+enum class ViewMode { Manga, Vertical, Single, Undefined };
 
 class ImageViewerApp
 {
 	private:
 		sf::RenderWindow window;
-		int a;
 
-		ViewMode mode = ViewMode::Manga;
+		ViewMode curr_mode = ViewMode::Manga;
 		std::vector<std::string> images;
 
 		std::vector<sf::Vector2f> textures_sizes;
@@ -54,54 +53,73 @@ class ImageViewerApp
 
 		std::map<sf::Keyboard::Key, bool> keys_state;
 
-		std::map<int, std::string> keyboard_bindings;
-		std::map<int, std::string> mouse_bindings;
+		std::map<std::pair<int, ViewMode>, std::string> keyboard_bindings;
+		std::map<std::pair<int, ViewMode>, std::string> mouse_bindings;
 
 		void load_config(std::string_view config_path)
 		{
-			std::string binding_name;
-			std::string command;
+			std::string line;
 
 			std::ifstream stream = std::ifstream(std::string(config_path));
 
-			while (stream >> binding_name)
+			while (std::getline(stream, line))
 			{
-				std::getline(stream, command);
-				auto str_begin = command.find_first_not_of(" ");
-				command = command.substr(str_begin);
+				if (line.empty())
+					continue;
 
-				if (binding_name[0] == '<' && binding_name.length() > 1)
+				int button = -1, key = -1;
+				auto sep = line.find_first_of(" ");
+
+				std::string piece = line.substr(0, sep);
+				ViewMode mode = ViewMode::Undefined;
+
+				if (piece[0] == '*' && piece.length() == 2)
 				{
-					int key;
-					if (binding_name == "<space>")
+					if (piece[1] == 'm')
+						mode = ViewMode::Manga;
+					else if (piece[1] == 's')
+						mode = ViewMode::Single;
+					else if (piece[1] == 'v')
+						mode = ViewMode::Vertical;
+
+					sep = line.find_first_of(" ", sep + 1);
+					piece = line.substr(3, sep - 3);
+				}
+
+				if (piece[0] == '<')
+				{
+					if (piece == "<space>")
 						key = sf::Keyboard::Space;
-					else if (binding_name == "<backspace>")
+					else if (piece == "<backspace>")
 						key = sf::Keyboard::Backspace;
 					else
 					{
-						std::cerr << binding_name << " is an invalid binding\n";
+						std::cerr << piece << " is an invalid binding\n";
 						continue;
 					}
-
-					keyboard_bindings[key] = command;
 				}
-				else if (binding_name[0] == 'm' && binding_name.length() == 2)
+				else if (piece[0] == 'm' && piece.length() == 2)
 				{
 					//0 LEFT
 					//1 RIGHT
 					//2 MIDDLE
-					int button_number = binding_name[1] - '0';
-					int button = sf::Mouse::Left + button_number;
-					mouse_bindings[button] = command;
+					int button_number = piece[1] - '0';
+					button = sf::Mouse::Left + button_number;
 				}
-				else if (binding_name.length() == 1)
+				else if (piece.length() == 1)
 				{
-					char binding = binding_name[0];
-					int key = sf::Keyboard::Key::A + (binding - 'a');
-					keyboard_bindings[key] = command;
+					char binding = piece[0];
+					key = sf::Keyboard::Key::A + (binding - 'a');
 				}
 				else
-					std::cerr << binding_name << " is an invalid binding\n";
+					std::cerr << line << " not valid\n";
+
+				piece = line.substr(sep + 1);
+
+				if (key != -1)
+					keyboard_bindings[{key, mode}] = piece;
+				else if (button != -1)
+					mouse_bindings[{button, mode}] = piece;
 			}
 		}
 
@@ -143,7 +161,7 @@ class ImageViewerApp
 			if (tag == curr_tag && !tag_pages.empty())
 				old_current_page = tag_pages[curr_page_index];
 
-			if (mode == ViewMode::Manga)
+			if (curr_mode == ViewMode::Manga)
 			{
 				auto& tag_repage_indices = repage_indices[tag];
 
@@ -268,7 +286,7 @@ class ImageViewerApp
 			std::vector<float> scales(page.size(), 1.f);
 			sf::Vector2i center_offset(0, 0);
 
-			if (mode == ViewMode::Manga || mode == ViewMode::Single)
+			if (curr_mode == ViewMode::Manga || curr_mode == ViewMode::Single)
 			{
 				sf::Vector2f drawn_size(0.f, (float)window.getSize().y);
 				for (unsigned int i = 0; i < page.size(); i++)
@@ -397,7 +415,7 @@ class ImageViewerApp
 				return;
 
 			int n_drawn_pages;
-			if (mode == ViewMode::Manga || mode == ViewMode::Single)
+			if (curr_mode == ViewMode::Manga || curr_mode == ViewMode::Single)
 				n_drawn_pages = render_manga();
 			else
 				n_drawn_pages = render_vertical();
@@ -549,7 +567,9 @@ class ImageViewerApp
 				}
 				else if (event.type == sf::Event::KeyPressed)
 				{
-					if (auto it = keyboard_bindings.find((int)event.key.code); it != keyboard_bindings.end())
+					if (auto it = keyboard_bindings.find({(int)event.key.code, curr_mode}); it != keyboard_bindings.end())
+						run_command(it->second);
+					else if (auto it = keyboard_bindings.find({(int)event.key.code, ViewMode::Undefined}); it != keyboard_bindings.end())
 						run_command(it->second);
 
 					keys_state[event.key.code] = 1;
@@ -560,12 +580,14 @@ class ImageViewerApp
 				}
 				else if (event.type == sf::Event::MouseButtonPressed)
 				{
-					if (auto it = mouse_bindings.find((int)event.mouseButton.button); it != mouse_bindings.end())
+					if (auto it = mouse_bindings.find({(int)event.mouseButton.button, curr_mode}); it != mouse_bindings.end())
+						run_command(it->second);
+					else if (auto it = mouse_bindings.find({(int)event.mouseButton.button, ViewMode::Undefined}); it != mouse_bindings.end())
 						run_command(it->second);
 				}
 			}
 
-			if (mode != ViewMode::Manga)
+			if (curr_mode != ViewMode::Manga)
 				return;
 
 			for (auto it = n_pageside_available.begin(), next_it = it; it != n_pageside_available.end(); it = next_it)
@@ -594,7 +616,7 @@ class ImageViewerApp
 
 		void handle_keyboard(float dt)
 		{
-			if (!window.hasFocus() || mode != ViewMode::Vertical || tags_indices.empty())
+			if (!window.hasFocus() || curr_mode != ViewMode::Vertical || tags_indices.empty())
 				return;
 
 			float scroll_speed = 1500;
@@ -777,7 +799,7 @@ class ImageViewerApp
 			}
 			else if (action == "repage")
 			{
-				if (!pages.empty() && mode == ViewMode::Manga)
+				if (!pages.empty() && curr_mode == ViewMode::Manga)
 				{
 					auto& curr_repage_indices = repage_indices[curr_tag];
 					if (auto it = std::find(curr_repage_indices.begin(), curr_repage_indices.end(), curr_image_index); it != curr_repage_indices.end())
@@ -792,26 +814,26 @@ class ImageViewerApp
 				std::cout << args[0] << std::endl;
 			else if (action == "change_mode")
 			{
-				ViewMode prev_mode = mode;
+				ViewMode prev_mode = curr_mode;
 				if (args[0] == "manga")
-					mode = ViewMode::Manga;
+					curr_mode = ViewMode::Manga;
 				else if (args[0] == "single")
-					mode = ViewMode::Single;
+					curr_mode = ViewMode::Single;
 				else if (args[0] == "vertical")
-					mode = ViewMode::Vertical;
+					curr_mode = ViewMode::Vertical;
 				else
 					std::cerr << "Mode " << args[0] << " not recognized" << std::endl;
 
-				if (mode != prev_mode)
+				if (curr_mode != prev_mode)
 				{
 					std::cout << "current_mode=" << args[0] << std::endl;
 
 					for (const auto&[tag, pages] : pages)
 						update_paging(tag);
 
-					if (mode == ViewMode::Manga || mode == ViewMode::Single)
+					if (curr_mode == ViewMode::Manga || curr_mode == ViewMode::Single)
 						window.setFramerateLimit(20);
-					else if (mode == ViewMode::Vertical)
+					else if (curr_mode == ViewMode::Vertical)
 						window.setFramerateLimit(0);
 				}
 			}
@@ -841,11 +863,11 @@ class ImageViewerApp
 			window.setFramerateLimit(20);
 			window.setVerticalSyncEnabled(true);
 
-			if (!config_path.empty())
-				load_config(config_path);
-
 			std::ios_base::sync_with_stdio(false);
 			std::cin.tie(NULL);
+
+			if (!config_path.empty())
+				load_config(config_path);
 
 			std::cout << "current_mode=manga" << std::endl;
 		}
