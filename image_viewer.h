@@ -146,7 +146,7 @@ std::pair<int, int> get_texture_pageside(const std::string& image)
 	});
 	unsigned int var_right = accum / (h-1);
 
-	page_side = {var_left < 50, var_right < 50};
+	page_side = {var_left < 500, var_right < 500};
 	return page_side;
 }
 
@@ -456,8 +456,12 @@ class ImageViewerApp
 
 				it = loaded_textures.try_emplace(key).first;
 				sf::Texture& tex = it->second;
-				if (tex.create(tex_data.size))
-					tex.update(tex_data.pixels.data());
+
+				if (!tex_data.pixels.empty())
+				{
+					if (tex.create(tex_data.size))
+						tex.update(tex_data.pixels.data());
+				}
 
 				if (loading_it != loading_textures.end())
 					loading_textures.erase(key);
