@@ -797,6 +797,14 @@ class ImageViewerApp
 					page_changed = true;
 				}
 			}
+			else if (action == "scroll")
+			{
+				if (!pages.empty() && curr_mode == ViewMode::Vertical)
+				{
+					int offset = std::stoi(args[0]);
+					vertical_scroll(offset);
+				}
+			}
 			else if (action == "repage")
 			{
 				if (!pages.empty() && curr_mode == ViewMode::Manga)
