@@ -424,6 +424,9 @@ class ImageViewerApp
 
 		void render()
 		{
+			if (tags_indices.empty())
+				return;
+
 			if (pages_changed)
 				reset_scales_offsets();
 
