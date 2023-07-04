@@ -36,7 +36,6 @@ class ImageViewerApp
 
 		bool update_title = true;
 		bool pages_changed = true;
-		bool view_changed = true;
 
 		std::vector<int> render_indices;
 		std::vector<sf::Vector2i> render_offsets; //offsets relative to render_pos
@@ -53,7 +52,6 @@ class ImageViewerApp
 
 		//FOR MANGA PAGING
 		std::map<int, std::vector<int>> repage_indices;
-		std::map<int, std::pair<int, int>> pages_side;
 		std::vector<LazyLoad<std::pair<int, int>>> texture_pageside;
 		std::map<int, std::pair<std::atomic<unsigned int>, unsigned int>> n_pageside_available;
 
