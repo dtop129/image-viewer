@@ -32,10 +32,11 @@ class ImageViewerApp
 		int curr_tag;
 
 		ViewMode curr_mode = ViewMode::Manga;
-		sf::Vector2f render_pos;
+		sf::Vector2f render_pos; //POSITION WHERE QUAD WILL BE DRAWN AT render_offsets {0, 0}
 
 		bool update_title = true;
-		bool page_changed = true;
+		bool pages_changed = true;
+		bool view_changed = true;
 
 		std::vector<int> render_indices;
 		std::vector<sf::Vector2i> render_offsets; //offsets relative to render_pos
@@ -176,7 +177,7 @@ class ImageViewerApp
 
 		void update_status()
 		{
-			if (update_title || page_changed)
+			if (update_title || pages_changed)
 			{
 				if (tags_indices.empty())
 					window.setTitle("no images loaded");
@@ -190,7 +191,7 @@ class ImageViewerApp
 					window.setTitle(s2ws(title));
 				}
 			}
-			if (!tags_indices.empty() && page_changed)
+			if (!tags_indices.empty() && pages_changed)
 			{
 				std::cout << "current_image=";
 				for (const auto& image_index : pages[curr_tag][curr_page_index])
@@ -328,7 +329,7 @@ class ImageViewerApp
 					}
 				}
 				if (old_current_page != tag_pages[curr_page_index])
-					page_changed = true;
+					pages_changed = true;
 			}
 		}
 
@@ -424,7 +425,8 @@ class ImageViewerApp
 
 		void render()
 		{
-			reset_scales_offsets();
+			if (pages_changed)
+				reset_scales_offsets();
 
 			std::vector<std::pair<int, float>> used_textures;
 			for (int i = 0; i < render_indices.size(); ++i)
@@ -572,7 +574,15 @@ class ImageViewerApp
 			if (old_tag != curr_tag || old_page_index != curr_page_index)
 			{
 				curr_image_index = image_index;
-				page_changed = true;
+				pages_changed = true;
+			}
+			else //when new pages come in and out of view
+			{
+				int last_index = render_indices.back();
+				int last_height = textures_sizes[last_index].y * render_scales.back();
+				int last_offset_y = render_offsets.back().y;
+				if (render_pos.y + last_offset_y + last_height < window.getSize().y || render_pos.y + last_offset_y >= window.getSize().y)
+					pages_changed = true;
 			}
 		}
 
@@ -758,7 +768,7 @@ class ImageViewerApp
 						curr_page_index = 0;
 						curr_image_index = tag_pages_it->second[0][0];
 
-						page_changed = true;
+						pages_changed = true;
 					}
 					else
 					{
@@ -773,7 +783,7 @@ class ImageViewerApp
 							curr_page_index = 0;
 							curr_image_index = tag_pages_it->second[0][0];
 
-							page_changed = true;
+							pages_changed = true;
 						}
 
 						tags_indices.erase(tag);
@@ -802,7 +812,7 @@ class ImageViewerApp
 						curr_page_index = 0;
 						curr_image_index = tag_pages_it->second[0][0];
 
-						page_changed = true;
+						pages_changed = true;
 					}
 					else
 						std::cout << "last_in_tag_dir=" << offset << std::endl;
@@ -823,7 +833,7 @@ class ImageViewerApp
 					curr_tag = new_tag;
 					curr_page_index = new_page_index;
 					curr_image_index = pages[curr_tag][curr_page_index][0];
-					page_changed = true;
+					pages_changed = true;
 				}
 			}
 			else if (action == "scroll")
@@ -928,7 +938,7 @@ class ImageViewerApp
 				render();
 				window.display();
 
-				page_changed = false;
+				pages_changed = false;
 				update_title = false;
 
 				//std::cout << 1 / dt << std::endl;
