@@ -4,6 +4,9 @@ LIBS = -lsfml-graphics -lsfml-window -lsfml-system
 HEADERS = image_viewer.h util.h
 OBJS = image_viewer.o util.o
 
+.PHONY: clean install
+.DEFAULT_GOAL=image_viewer
+
 image_viewer.o: image_viewer.cpp image_viewer.h
 	g++ -c -o $@ $< $(CXXFLAGS)
 
@@ -18,5 +21,3 @@ install: image_viewer
 
 clean:
 	rm -f image_viewer $(OBJS)
-
-.PHONY: clean install
