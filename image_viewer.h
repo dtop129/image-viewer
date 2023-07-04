@@ -119,7 +119,10 @@ class ImageViewerApp
 				else if (piece.length() == 1)
 				{
 					char binding = piece[0];
-					key = sf::Keyboard::Key::A + (binding - 'a');
+					if (isalpha(binding))
+						key = sf::Keyboard::Key::A + (binding - 'a');
+					else if (isdigit(binding))
+						key = sf::Keyboard::Key::Num0 + (binding - '0');
 				}
 				else
 					std::cerr << line << " not valid\n";
@@ -879,6 +882,12 @@ class ImageViewerApp
 					reset_scales_offsets();
 					vertical_scroll(0.f);
 				}
+			}
+			else if (action == "reset_view")
+			{
+				render_origin = {0, 0};
+				zoom_factor = 1.f;
+				reset_scales_offsets();
 			}
 			else if (action == "repage")
 			{
