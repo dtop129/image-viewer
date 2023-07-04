@@ -16,12 +16,12 @@ std::wstring s2ws(const std::string& s) {
 	return ws;
 }
 
-TextureData load_texture(const std::string& image_path, float scale)
+sf::Image load_texture(const std::string& image_path, float scale)
 {
 	int h, w, c;
 	uint8_t* pixels = stbi_load(image_path.c_str(), &w, &h, &c, 3);
 	if (pixels == nullptr)
-		return TextureData();
+		return sf::Image();
 
 	unsigned int new_h = h * scale;
 	unsigned int new_w = w * scale;
@@ -41,7 +41,9 @@ TextureData load_texture(const std::string& image_path, float scale)
 		rgba_pixels.push_back(255);
 	}
 
-	return {rgba_pixels, {new_w, new_h}};
+	sf::Image image;
+	image.create({new_w, new_h}, rgba_pixels.data());
+	return image;
 }
 
 std::pair<int, int> get_texture_pageside(const std::string& image)

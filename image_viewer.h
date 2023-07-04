@@ -45,7 +45,7 @@ class ImageViewerApp
 		std::vector<sf::Vector2f> textures_sizes;
 
 		std::map<std::pair<int, float>, sf::Texture> loaded_textures;
-		std::map<std::pair<int, float>, LazyLoad<TextureData>> loading_textures;
+		std::map<std::pair<int, float>, LazyLoad<sf::Image>> loading_textures;
 
 		std::map<int, std::vector<int>> tags_indices;
 		std::map<int, std::vector<std::vector<int>>> pages;
@@ -152,7 +152,7 @@ class ImageViewerApp
 				auto loading_it = loading_textures.find(key);
 
 				bool tex_available = loading_it != loading_textures.end() && loading_it->second.available();
-				TextureData tex_data;
+				sf::Image tex_data;
 				if (tex_available)
 					tex_data = loading_it->second.get();
 				else
@@ -160,12 +160,7 @@ class ImageViewerApp
 
 				it = loaded_textures.try_emplace(key).first;
 				sf::Texture& tex = it->second;
-
-				if (!tex_data.pixels.empty())
-				{
-					if (tex.create(tex_data.size))
-						tex.update(tex_data.pixels.data());
-				}
+				tex.loadFromImage(tex_data);
 
 				if (loading_it != loading_textures.end())
 					loading_textures.erase(key);
