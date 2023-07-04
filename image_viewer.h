@@ -32,6 +32,8 @@ class ImageViewerApp
 		int curr_tag;
 
 		ViewMode curr_mode = ViewMode::Manga;
+
+		float zoom_factor = 1.f;
 		sf::Vector2f render_pos; //POSITION WHERE QUAD WILL BE DRAWN AT render_offsets {0, 0}
 
 		bool update_title = true;
@@ -322,7 +324,11 @@ class ImageViewerApp
 					}
 				}
 				if (old_current_page != tag_pages[curr_page_index])
+				{
+					zoom_factor = 1.f;
+					render_pos = {0, 0};
 					pages_changed = true;
+				}
 			}
 		}
 
@@ -400,7 +406,7 @@ class ImageViewerApp
 					const auto& draw_index = pages[draw_tag][draw_page_index][0];
 					float scale = get_horizontal_fit_scale(draw_index);
 
-					int offset_x = (window_size.x - textures_sizes[draw_index].x * scale) / 2.0;
+					int offset_x = (window_size.x - textures_sizes[draw_index].x * scale) / 2.f;
 
 					render_indices.push_back(draw_index);
 					render_offsets.emplace_back(offset_x, offset_y);
@@ -421,14 +427,17 @@ class ImageViewerApp
 			if (pages_changed)
 				reset_scales_offsets();
 
+			sf::Vector2f window_center = sf::Vector2f(window.getSize()) / 2.f;
+			sf::Vector2f zoom_render_pos = window_center - (window_center - render_pos) * zoom_factor;
+
 			std::vector<std::pair<int, float>> used_textures;
-			for (int i = 0; i < render_indices.size(); ++i)
+			for (unsigned int i = 0; i < render_indices.size(); ++i)
 			{
-				sf::Sprite sprite(get_texture(render_indices[i], render_scales[i]));
-				sprite.setPosition(render_pos + sf::Vector2f(render_offsets[i]));
+				sf::Sprite sprite(get_texture(render_indices[i], render_scales[i] * zoom_factor));
+				sprite.setPosition(zoom_render_pos + sf::Vector2f(render_offsets[i]) * zoom_factor);
 				window.draw(sprite);
 
-				used_textures.emplace_back(render_indices[i], render_scales[i]);
+				used_textures.emplace_back(render_indices[i], render_scales[i] * zoom_factor);
 			}
 
 			auto preload_page_offset = [this, &used_textures](int offset)
@@ -439,10 +448,10 @@ class ImageViewerApp
 				const auto& page = pages[preload_tag][preload_page_index];
 
 				auto scales = get_fit_scales(page);
-				for (int i = 0; i < page.size(); ++i)
+				for (unsigned int i = 0; i < page.size(); ++i)
 				{
-					prepare_texture(page[i], scales[i]);
-					used_textures.emplace_back(page[i], scales[i]);
+					prepare_texture(page[i], scales[i] * zoom_factor);
+					used_textures.emplace_back(page[i], scales[i] * zoom_factor);
 				}
 			};
 
@@ -647,7 +656,7 @@ class ImageViewerApp
 			if (!window.hasFocus() || tags_indices.empty())
 				return;
 
-			float scroll_speed = 1500;
+			float scroll_speed = 1500 / zoom_factor;
 			if (keys_state[sf::Keyboard::Key::J])
 				vertical_scroll(-scroll_speed * dt);
 			if (keys_state[sf::Keyboard::Key::K])
@@ -761,6 +770,8 @@ class ImageViewerApp
 						curr_page_index = 0;
 						curr_image_index = tag_pages_it->second[0][0];
 
+						zoom_factor = 1.f;
+						render_pos = {0, 0};
 						pages_changed = true;
 					}
 					else
@@ -776,6 +787,8 @@ class ImageViewerApp
 							curr_page_index = 0;
 							curr_image_index = tag_pages_it->second[0][0];
 
+							zoom_factor = 1.f;
+							render_pos = {0, 0};
 							pages_changed = true;
 						}
 
@@ -797,18 +810,19 @@ class ImageViewerApp
 					int max_offset = std::distance(tag_pages_it, std::prev(pages.end()));
 					int clamped_offset = std::clamp(offset, min_offset, max_offset);
 
-					if (clamped_offset != 0)
+					if (clamped_offset == 0)
+						std::cout << "last_in_tag_dir=" << offset << std::endl;
+					else
 					{
 						std::advance(tag_pages_it, clamped_offset);
-
 						curr_tag = tag_pages_it->first;
 						curr_page_index = 0;
 						curr_image_index = tag_pages_it->second[0][0];
 
+						zoom_factor = 1.f;
+						render_pos = {0, 0};
 						pages_changed = true;
 					}
-					else
-						std::cout << "last_in_tag_dir=" << offset << std::endl;
 				}
 			}
 			else if (action == "goto_relative")
@@ -822,10 +836,12 @@ class ImageViewerApp
 					std::cout << "last_in_dir=" << offset << std::endl;
 				else
 				{
-					render_pos = {0, 0};
 					curr_tag = new_tag;
 					curr_page_index = new_page_index;
 					curr_image_index = pages[curr_tag][curr_page_index][0];
+
+					zoom_factor = 1.f;
+					render_pos = {0, 0};
 					pages_changed = true;
 				}
 			}
@@ -834,8 +850,14 @@ class ImageViewerApp
 				if (!pages.empty() && curr_mode == ViewMode::Vertical)
 				{
 					int offset = std::stoi(args[0]);
-					vertical_scroll(-offset);
+					vertical_scroll(-offset / zoom_factor);
 				}
+			}
+			else if (action == "zoom")
+			{
+				float factor = std::stof(args[0]);
+				zoom_factor *= factor;
+				zoom_factor = std::min(3.f, zoom_factor);
 			}
 			else if (action == "repage")
 			{
@@ -871,12 +893,10 @@ class ImageViewerApp
 					for (const auto&[tag, pages] : pages)
 						update_paging(tag);
 
-					reset_scales_offsets();
 
-					//if (curr_mode == ViewMode::Manga || curr_mode == ViewMode::Single)
-					//	window.setFramerateLimit(20);
-					//else if (curr_mode == ViewMode::Vertical)
-					//	window.setFramerateLimit(0);
+					zoom_factor = 1.f;
+					render_pos = {0, 0};
+					reset_scales_offsets();
 				}
 			}
 			else if (action == "quit")
