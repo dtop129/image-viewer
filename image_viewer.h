@@ -34,13 +34,13 @@ class ImageViewerApp
 		ViewMode curr_mode = ViewMode::Manga;
 
 		float zoom_factor = 1.f;
-		sf::Vector2f render_pos; //POSITION WHERE QUAD WILL BE DRAWN AT render_offsets {0, 0}
+		sf::Vector2f render_origin; //POSITION WHERE QUAD WILL BE DRAWN AT render_offsets {0, 0}
 
 		bool update_title = true;
 		bool pages_changed = true;
 
 		std::vector<int> render_indices;
-		std::vector<sf::Vector2i> render_offsets; //offsets relative to render_pos
+		std::vector<sf::Vector2i> render_offsets; //offsets relative to render_origin
 		std::vector<float> render_scales;
 
 		std::vector<std::string> images;
@@ -326,7 +326,7 @@ class ImageViewerApp
 				if (old_current_page != tag_pages[curr_page_index])
 				{
 					zoom_factor = 1.f;
-					render_pos = {0, 0};
+					render_origin = {0, 0};
 					pages_changed = true;
 				}
 			}
@@ -363,7 +363,7 @@ class ImageViewerApp
 		}
 
 		//resets render pos and scales to center fit
-		//the image will be centered with a render_pos = {0, 0}
+		//the image will be centered with a render_origin = {0, 0}
 		void reset_scales_offsets()
 		{
 			if (tags_indices.empty())
@@ -387,12 +387,16 @@ class ImageViewerApp
 				for (unsigned int i = 0; i < page.size(); i++)
 					drawn_size.x += textures_sizes[page[i]].x * render_scales[i];
 
-				sf::Vector2i offset = (window_size - (sf::Vector2i)drawn_size) / 2;
+				sf::Vector2i offset = sf::Vector2i(zoom_factor * (sf::Vector2f(window_size) - drawn_size) / 2.f);
 				for (int i = page.size() - 1; i >= 0; i--)
 				{
 					render_offsets[i] = offset;
-					offset.x += textures_sizes[page[i]].x * render_scales[i];
+					offset.x += textures_sizes[page[i]].x * render_scales[i] * zoom_factor;
 				}
+
+				for (auto& scale : render_scales)
+					scale *= zoom_factor;
+
 			}
 			else
 			{
@@ -406,15 +410,15 @@ class ImageViewerApp
 					const auto& draw_index = pages[draw_tag][draw_page_index][0];
 					float scale = get_horizontal_fit_scale(draw_index);
 
-					int offset_x = (window_size.x - textures_sizes[draw_index].x * scale) / 2.f;
+					int offset_x = (window_size.x - textures_sizes[draw_index].x * scale) / 2.f * zoom_factor;
 
 					render_indices.push_back(draw_index);
 					render_offsets.emplace_back(offset_x, offset_y);
-					render_scales.push_back(scale);
+					render_scales.push_back(scale * zoom_factor);
 
-					offset_y += textures_sizes[draw_index].y * scale;
+					offset_y += textures_sizes[draw_index].y * scale * zoom_factor;
 
-					if (offset_y + render_pos.y >= window_size.y)
+					if (render_origin.y + offset_y >= window_size.y)
 						break;
 
 					std::tie(draw_tag, draw_page_index, lastpage) = advance_page(draw_tag, draw_page_index, 1);
@@ -430,17 +434,14 @@ class ImageViewerApp
 			if (pages_changed)
 				reset_scales_offsets();
 
-			sf::Vector2f window_center = sf::Vector2f(window.getSize()) / 2.f;
-			sf::Vector2f zoom_render_pos = window_center - (window_center - render_pos) * zoom_factor;
-
 			std::vector<std::pair<int, float>> used_textures;
 			for (unsigned int i = 0; i < render_indices.size(); ++i)
 			{
-				sf::Sprite sprite(get_texture(render_indices[i], render_scales[i] * zoom_factor));
-				sprite.setPosition(zoom_render_pos + sf::Vector2f(render_offsets[i]) * zoom_factor);
+				sf::Sprite sprite(get_texture(render_indices[i], render_scales[i]));
+				sprite.setPosition(render_origin + sf::Vector2f(render_offsets[i]));
 				window.draw(sprite);
 
-				used_textures.emplace_back(render_indices[i], render_scales[i] * zoom_factor);
+				used_textures.emplace_back(render_indices[i], render_scales[i]);
 			}
 
 			auto preload_page_offset = [this, &used_textures](int offset)
@@ -530,7 +531,7 @@ class ImageViewerApp
 
 		void vertical_scroll(float offset)
 		{
-			render_pos.y += offset;
+			render_origin.y += offset;
 			if (curr_mode != ViewMode::Vertical)
 				return;
 
@@ -539,36 +540,36 @@ class ImageViewerApp
 
 			auto image_index = pages[curr_tag][curr_page_index][0];
 
-			float scale = get_horizontal_fit_scale(image_index);
+			float scale = get_horizontal_fit_scale(image_index) * zoom_factor;
 			float curr_image_height = textures_sizes[image_index].y * scale;
 
 			bool hit_border;
-			while (-render_pos.y >= curr_image_height || render_pos.y > 0)
+			while (-render_origin.y >= curr_image_height || render_origin.y > 0)
 			{
-				if (-render_pos.y >= curr_image_height)
+				if (-render_origin.y >= curr_image_height)
 				{
-					render_pos.y += curr_image_height;
+					render_origin.y += curr_image_height;
 
 					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, 1);
 					if (hit_border)
 					{
-						render_pos.y = -curr_image_height;
+						render_origin.y = -curr_image_height;
 						break;
 					}
 				}
-				else if (render_pos.y > 0)
+				else if (render_origin.y > 0)
 				{
 					std::tie(curr_tag, curr_page_index, hit_border) = advance_page(curr_tag, curr_page_index, -1);
 					if (hit_border){
-						render_pos.y = 0;
+						render_origin.y = 0;
 						break;
 					}
 
 					image_index = pages[curr_tag][curr_page_index][0];
-					scale = get_horizontal_fit_scale(image_index);
+					scale = get_horizontal_fit_scale(image_index) * zoom_factor;
 					curr_image_height = textures_sizes[image_index].y * scale;
 
-					render_pos.y -= curr_image_height;
+					render_origin.y -= curr_image_height;
 				}
 
 				image_index = pages[curr_tag][curr_page_index][0];
@@ -586,7 +587,7 @@ class ImageViewerApp
 				int last_index = render_indices.back();
 				int last_height = textures_sizes[last_index].y * render_scales.back();
 				int last_offset_y = render_offsets.back().y;
-				if (render_pos.y + last_offset_y + last_height < window.getSize().y || render_pos.y + last_offset_y >= window.getSize().y)
+				if (render_origin.y + last_offset_y + last_height < window.getSize().y || render_origin.y + last_offset_y >= window.getSize().y)
 					pages_changed = true;
 			}
 		}
@@ -659,15 +660,15 @@ class ImageViewerApp
 			if (!window.hasFocus() || tags_indices.empty())
 				return;
 
-			float scroll_speed = 1500 / zoom_factor;
+			float scroll_speed = 1500;
 			if (keys_state[sf::Keyboard::Key::J])
 				vertical_scroll(-scroll_speed * dt);
 			if (keys_state[sf::Keyboard::Key::K])
 				vertical_scroll(scroll_speed * dt);
 			if (keys_state[sf::Keyboard::Key::L])
-				render_pos.x -= scroll_speed * dt;
+				render_origin.x -= scroll_speed * dt;
 			if (keys_state[sf::Keyboard::Key::H])
-				render_pos.x += scroll_speed * dt;
+				render_origin.x += scroll_speed * dt;
 		}
 
 		void run_command(std::string_view cmd)
@@ -758,7 +759,11 @@ class ImageViewerApp
 
 					update_title = true;
 				}
+
 				update_paging(tag);
+
+				reset_scales_offsets();
+				vertical_scroll(0.f);
 			}
 			else if (action == "goto_tag" || action == "remove_tag")
 			{
@@ -774,7 +779,7 @@ class ImageViewerApp
 						curr_image_index = tag_pages_it->second[0][0];
 
 						zoom_factor = 1.f;
-						render_pos = {0, 0};
+						render_origin = {0, 0};
 						pages_changed = true;
 					}
 					else
@@ -791,7 +796,7 @@ class ImageViewerApp
 							curr_image_index = tag_pages_it->second[0][0];
 
 							zoom_factor = 1.f;
-							render_pos = {0, 0};
+							render_origin = {0, 0};
 							pages_changed = true;
 						}
 
@@ -823,7 +828,7 @@ class ImageViewerApp
 						curr_image_index = tag_pages_it->second[0][0];
 
 						zoom_factor = 1.f;
-						render_pos = {0, 0};
+						render_origin = {0, 0};
 						pages_changed = true;
 					}
 				}
@@ -844,7 +849,7 @@ class ImageViewerApp
 					curr_image_index = pages[curr_tag][curr_page_index][0];
 
 					zoom_factor = 1.f;
-					render_pos = {0, 0};
+					render_origin = {0, 0};
 					pages_changed = true;
 				}
 			}
@@ -853,14 +858,27 @@ class ImageViewerApp
 				if (!pages.empty() && curr_mode == ViewMode::Vertical)
 				{
 					int offset = std::stoi(args[0]);
-					vertical_scroll(-offset / zoom_factor);
+					vertical_scroll(-offset);
 				}
 			}
 			else if (action == "zoom")
 			{
-				float factor = std::stof(args[0]);
-				zoom_factor *= factor;
-				zoom_factor = std::min(3.f, zoom_factor);
+				if (!pages.empty())
+				{
+					float factor = std::stof(args[0]);
+
+					float prev_zoom_factor = zoom_factor;
+					zoom_factor *= factor;
+					zoom_factor = std::min(3.f, std::max(0.1f, zoom_factor));
+
+					sf::Vector2f center = sf::Vector2f(window.getSize()) / 2.f;
+
+					render_origin = center - (center - render_origin) / prev_zoom_factor;
+					render_origin += (center - render_origin) * (1 - zoom_factor);
+
+					reset_scales_offsets();
+					vertical_scroll(0.f);
+				}
 			}
 			else if (action == "repage")
 			{
@@ -898,7 +916,7 @@ class ImageViewerApp
 
 
 					zoom_factor = 1.f;
-					render_pos = {0, 0};
+					render_origin = {0, 0};
 					reset_scales_offsets();
 				}
 			}
