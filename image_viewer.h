@@ -26,6 +26,7 @@ class ImageViewerApp
 {
 	private:
 		sf::RenderWindow window;
+		sf::Vector2f window_size;
 
 		int curr_image_index = 0;
 		int curr_page_index = 0;
@@ -38,7 +39,6 @@ class ImageViewerApp
 
 		bool update_title = true;
 		bool page_changed = true;
-		bool view_changed = true;
 
 		std::vector<int> render_indices;
 		std::vector<sf::Vector2i> render_offsets; //offsets relative to render_origin
@@ -338,7 +338,7 @@ class ImageViewerApp
 
 		float get_horizontal_fit_scale(int image_index)
 		{
-			return std::min(700.f, (float)window.getSize().x) / textures_sizes[image_index].x;
+			return std::min(700.f, window_size.x) / textures_sizes[image_index].x;
 		}
 
 		std::vector<float> get_fit_scales(const std::vector<int>& page)
@@ -347,8 +347,6 @@ class ImageViewerApp
 				return {get_horizontal_fit_scale(page[0])};
 
 			std::vector<float> scales(page.size());
-
-			sf::Vector2f window_size = sf::Vector2f(window.getSize());
 
 			sf::Vector2f drawn_size(0, window_size.y);
 			for (unsigned int i = 0; i < page.size(); i++)
@@ -377,8 +375,6 @@ class ImageViewerApp
 			render_scales.clear();
 			render_offsets.clear();
 
-			sf::Vector2i window_size = sf::Vector2i(window.getSize());
-
 			if (curr_mode == ViewMode::Manga || curr_mode == ViewMode::Single)
 			{
 				const auto& page = pages[curr_tag][curr_page_index];
@@ -391,8 +387,7 @@ class ImageViewerApp
 				for (unsigned int i = 0; i < page.size(); i++)
 					drawn_size.x += textures_sizes[page[i]].x * render_scales[i];
 
-				sf::Vector2i offset = sf::Vector2i((sf::Vector2f(window_size) - drawn_size) / 2.f);
-				offset.y *= zoom_factor;
+				sf::Vector2i offset = sf::Vector2i((window_size - drawn_size) / 2.f);
 				for (int i = page.size() - 1; i >= 0; i--)
 				{
 					render_offsets[i] = offset;
@@ -414,10 +409,10 @@ class ImageViewerApp
 					int offset_x = (window_size.x - textures_sizes[draw_index].x * scale) / 2.f;
 
 					render_indices.push_back(draw_index);
-					render_offsets.emplace_back(offset_x, offset_y / zoom_factor);
+					render_offsets.emplace_back(offset_x, offset_y);
 					render_scales.push_back(scale);
 
-					offset_y += textures_sizes[draw_index].y * scale * zoom_factor;
+					offset_y += textures_sizes[draw_index].y * scale;
 
 					if (render_origin.y + offset_y >= window_size.y)
 						break;
@@ -432,7 +427,7 @@ class ImageViewerApp
 			if (tags_indices.empty())
 				return;
 
-			if (page_changed || view_changed)
+			if (page_changed)
 				reset_scales_offsets();
 			vertical_scroll(0.f);
 
@@ -531,6 +526,22 @@ class ImageViewerApp
 			return {tag_pages_it->first, page_index, 0};
 		}
 
+		void zoom(float factor)
+		{
+			float prev_zoom_factor = zoom_factor;
+			zoom_factor *= factor;
+			zoom_factor = std::min(3.f, std::max(0.1f, zoom_factor));
+
+			sf::Vector2f center = window_size / 2.f;
+
+			//magic trick to keep zooming centered
+			render_origin = center - (center - render_origin) / prev_zoom_factor;
+			render_origin += (center - render_origin) * (1 - zoom_factor);
+
+			//in case zoom + recentering changed images at bottom or top
+			vertical_scroll(0.f);
+		}
+
 		void vertical_scroll(float offset)
 		{
 			render_origin.y += offset;
@@ -594,18 +605,18 @@ class ImageViewerApp
 					int last_offset_y = render_offsets.back().y * zoom_factor;
 
 					auto[last_tag, last_page_index, hit_border] = advance_page(curr_tag, curr_page_index, render_indices.size());
-					if (render_origin.y + last_offset_y + last_height < window.getSize().y && !hit_border)
+					if (render_origin.y + last_offset_y + last_height < window_size.y && !hit_border)
 					{
 						int new_image_index = pages[last_tag][last_page_index][0];
 
 						float scale = get_horizontal_fit_scale(new_image_index);
-						int offset_x = (window.getSize().x - textures_sizes[new_image_index].x * scale) / 2.f;
+						int offset_x = (window_size.x - textures_sizes[new_image_index].x * scale) / 2.f;
 
 						render_indices.push_back(new_image_index);
 						render_offsets.emplace_back(offset_x, (last_offset_y + last_height) / zoom_factor);
 						render_scales.push_back(scale);
 					}
-					else if (render_origin.y + last_offset_y >= window.getSize().y)
+					else if (render_origin.y + last_offset_y >= window_size.y)
 					{
 						render_indices.pop_back();
 						render_offsets.pop_back();
@@ -625,9 +636,11 @@ class ImageViewerApp
 					window.close();
 				else if (event.type == sf::Event::Resized)
 				{
-					view_changed = true;
 
-					sf::View new_view(sf::FloatRect(sf::Vector2f(0.f, 0.f), sf::Vector2f(event.size.width, event.size.height)));
+					window_size = sf::Vector2f(event.size.width, event.size.height);
+					reset_scales_offsets();
+
+					sf::View new_view(sf::FloatRect(sf::Vector2f(0.f, 0.f), window_size));
 					window.setView(new_view);
 				}
 				else if (event.type == sf::Event::KeyPressed)
@@ -885,16 +898,7 @@ class ImageViewerApp
 			else if (action == "zoom")
 			{
 				float factor = std::stof(args[0]);
-
-				float prev_zoom_factor = zoom_factor;
-				zoom_factor *= factor;
-				zoom_factor = std::min(3.f, std::max(0.1f, zoom_factor));
-
-				sf::Vector2f center = sf::Vector2f(window.getSize()) / 2.f;
-
-				//magic trick to keep zooming centered
-				render_origin = center - (center - render_origin) / prev_zoom_factor;
-				render_origin += (center - render_origin) * (1 - zoom_factor);
+				zoom(factor);
 			}
 			else if (action == "reset_view")
 			{
@@ -994,7 +998,6 @@ class ImageViewerApp
 
 				page_changed = false;
 				update_title = false;
-				view_changed = false;
 
 				//std::cout << dt << '\n';
 				//std::flush(std::cout);
