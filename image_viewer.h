@@ -506,8 +506,7 @@ class ImageViewerApp {
 		sf::Vector2f center = window_size / 2.f;
 
 		// magic trick to keep zooming centered
-		render_origin = center - (center - render_origin) / prev_zoom_factor;
-		render_origin += (center - render_origin) * (1 - zoom_factor);
+		render_origin = center - (center - render_origin) * zoom_factor / prev_zoom_factor;
 
 		// in case zoom + recentering changed images at bottom or top
 		vertical_scroll(0.f);
@@ -603,6 +602,8 @@ class ImageViewerApp {
 			else if (event.type == sf::Event::Resized) {
 
 				window_size = sf::Vector2f(event.size.width, event.size.height);
+				zoom_factor = 1.f;
+				render_origin = {0, 0};
 				reset_scales_offsets();
 
 				sf::View new_view(
