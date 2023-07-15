@@ -603,7 +603,10 @@ class ImageViewerApp {
 
 				window_size = sf::Vector2f(event.size.width, event.size.height);
 				zoom_factor = 1.f;
-				render_origin = {0, 0};
+				render_origin.x = 0;
+				if (curr_mode != ViewMode::Vertical)
+					render_origin.y = 0;
+
 				reset_scales_offsets();
 
 				sf::View new_view(
