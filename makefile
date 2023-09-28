@@ -1,5 +1,5 @@
 CXXFLAGS = -march=native -Ofast -std=c++20 -Wall -Iinclude
-LIBS = -lsfml-graphics -lsfml-window -lsfml-system
+LIBS = -lsfml-graphics -lsfml-window -lsfml-system -ludev -lX11 -lXrandr -lXcursor
 
 HEADERS = image_viewer.h util.h
 OBJS = image_viewer.o util.o

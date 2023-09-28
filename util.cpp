@@ -5,7 +5,6 @@
 
 #include <lancir.h>
 
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 std::wstring s2ws(const std::string &s) {
