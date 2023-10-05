@@ -18,6 +18,8 @@
 #include "util.h"
 
 #include <SFML/Graphics.hpp>
+
+#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 enum class ViewMode { Manga, Vertical, Single, Undefined };
