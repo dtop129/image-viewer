@@ -508,7 +508,8 @@ class ImageViewerApp {
 		sf::Vector2f center = window_size / 2.f;
 
 		// magic trick to keep zooming centered
-		render_origin = center - (center - render_origin) * zoom_factor / prev_zoom_factor;
+		render_origin =
+			center - (center - render_origin) * zoom_factor / prev_zoom_factor;
 
 		// in case zoom + recentering changed images at bottom or top
 		vertical_scroll(0.f);
@@ -562,8 +563,7 @@ class ImageViewerApp {
 		if (old_tag != curr_tag || old_page_index != curr_page_index) {
 			curr_image_index = image_index;
 			page_changed = true;
-		} else // when pages at the bottom come in and out of view
-		{
+		} else { // when pages at the bottom come in and out of view
 			while (true) {
 				int last_index = render_indices.back();
 				int last_height = textures_sizes[last_index].y *
