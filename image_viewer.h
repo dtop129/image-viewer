@@ -96,13 +96,13 @@ class ImageViewerApp {
 
 			if (piece[0] == '<') {
 				if (piece == "<space>")
-					key = sf::Keyboard::Space;
+					key = static_cast<int>(sf::Keyboard::Key::Space);
 				else if (piece == "<backspace>")
-					key = sf::Keyboard::Backspace;
+					key = static_cast<int>(sf::Keyboard::Key::Backspace);
 				else if (piece == "<plus>")
-					key = sf::Keyboard::Add;
+					key = static_cast<int>(sf::Keyboard::Key::Add);
 				else if (piece == "<minus>")
-					key = sf::Keyboard::Subtract;
+					key = static_cast<int>(sf::Keyboard::Key::Subtract);
 				else {
 					std::cerr << piece << " is an invalid binding\n";
 					continue;
@@ -112,13 +112,13 @@ class ImageViewerApp {
 				// 1 RIGHT
 				// 2 MIDDLE
 				int button_number = piece[1] - '0';
-				button = sf::Mouse::Left + button_number;
+				button = static_cast<int>(sf::Mouse::Button::Left) + button_number;
 			} else if (piece.length() == 1) {
 				char binding = piece[0];
 				if (isalpha(binding))
-					key = sf::Keyboard::Key::A + (binding - 'a');
+					key = static_cast<int>(sf::Keyboard::Key::A) + (binding - 'a');
 				else if (isdigit(binding))
-					key = sf::Keyboard::Key::Num0 + (binding - '0');
+					key = static_cast<int>(sf::Keyboard::Key::Num0) + (binding - '0');
 			} else
 				std::cerr << line << " not valid\n";
 
